@@ -48,6 +48,7 @@ mobile/ios/DerivedData/
 mobile/ios/*.xcworkspace/xcuserdata/
 mobile/ios/*.xcodeproj/xcuserdata/
 mobile/ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+mobile/ios/.xcode.env.local
 
 # React Native — Android (deferred to Phase 2; keep generated files
 # on disk for a future switch, but do not track them in git)
