@@ -1,4 +1,17 @@
-# Resolve react_native_pods.rb with node to allow for hoisting
+# Podfile template for ParkWalk iOS.
+#
+# After running `npx @react-native-community/cli init ParkWalk --version 0.73.11`,
+# REPLACE the generated mobile/ios/Podfile with this file (the RN-generated
+# skeleton has no Mapbox pre_install hook).
+#
+# Prerequisites:
+# 1. Create a Mapbox access token with scope DOWNLOADS:READ (secret, sk.*).
+# 2. Append it to ~/.netrc with mode 600:
+#      machine api.mapbox.com
+#        login mapbox
+#        password sk.your-secret-token
+# 3. cd mobile/ios && pod install
+
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
     "react-native/scripts/react_native_pods.rb",
@@ -8,21 +21,16 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-# If you are using a `react-native-flipper` your iOS build will fail when `NO_FLIPPER=1` is set.
-# because `react-native-flipper` depends on (FlipperKit,...) that will be excluded
-#
-# To fix this you can also exclude `react-native-flipper` using a `react-native.config.js`
-# ```js
-# module.exports = {
-#   dependencies: {
-#     ...(process.env.NO_FLIPPER ? { 'react-native-flipper': { platforms: { ios: null } } } : {}),
-# ```
-flipper_config = ENV['NO_FLIPPER'] == "1" ? FlipperConfiguration.disabled : FlipperConfiguration.enabled
-
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
   use_frameworks! :linkage => linkage.to_sym
+end
+
+# Required by @rnmapbox/maps: pre_install hook that configures Mapbox SDK.
+pre_install do |installer|
+  $RNMapboxMapsImpl = 'mapbox'
+  $RNMapboxMapsDownloadToken = ''  # leave empty; pulls from ~/.netrc
 end
 
 target 'ParkWalk' do
@@ -30,26 +38,27 @@ target 'ParkWalk' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # Enables Flipper.
-    #
-    # Note that if you have use_frameworks! enabled, Flipper will not work and
-    # you should disable the next line.
-    :flipper_configuration => flipper_config,
-    # An absolute path to your application root.
+    # Hermes is enabled by default. Keep it on for perf.
+    :hermes_enabled => true,
+    :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  target 'ParkWalkTests' do
-    inherit! :complete
-    # Pods for testing
-  end
+  $RNMapboxMaps = require_relative '../node_modules/@rnmapbox/maps/scripts/install'
+  $RNMapboxMaps.post_install({ installer: nil })
 
   post_install do |installer|
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
+
+    # Ensure Mapbox framework gets proper signing under free Apple ID.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      end
+    end
   end
 end
