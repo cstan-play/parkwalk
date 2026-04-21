@@ -1,0 +1,116 @@
+{
+  "description": "Synthetic but realistic 10s walking fixture. ~1.2 m/s east from SF city hall. Accelerometer magnitude oscillates around 9.81 with a ~2 Hz walking cadence. Activity recognition reports WALKING.",
+  "summary": {
+    "windowSeconds": 10,
+    "sampleCount": 11,
+    "state": "WALKING_VALID",
+    "averageSpeedMps": 1.2,
+    "maxSpeedMps": 1.45,
+    "averageAccuracyMeters": 5,
+    "stepRateHz": 2.0,
+    "dominantActivity": "WALKING",
+    "validationScore": 0.95,
+    "generatedAt": "2026-04-20T10:00:10.000Z"
+  },
+  "samples": [
+    {
+      "timestamp": "2026-04-20T10:00:00.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.4191, "accuracy": 5 },
+      "speedMps": 1.2,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.4, "y": 0.0, "z": 9.9 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:01.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41908636, "accuracy": 5 },
+      "speedMps": 1.22,
+      "headingDegrees": 90,
+      "acceleration": { "x": -0.3, "y": 0.1, "z": 10.4 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:02.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41907272, "accuracy": 6 },
+      "speedMps": 1.18,
+      "headingDegrees": 91,
+      "acceleration": { "x": 0.5, "y": -0.2, "z": 9.5 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:03.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41905908, "accuracy": 5 },
+      "speedMps": 1.3,
+      "headingDegrees": 90,
+      "acceleration": { "x": -0.4, "y": 0.3, "z": 10.2 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:04.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41904544, "accuracy": 5 },
+      "speedMps": 1.1,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.6, "y": -0.1, "z": 9.6 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:05.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.4190318, "accuracy": 4 },
+      "speedMps": 1.25,
+      "headingDegrees": 89,
+      "acceleration": { "x": -0.5, "y": 0.2, "z": 10.3 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:06.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41901816, "accuracy": 5 },
+      "speedMps": 1.15,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.3, "y": -0.3, "z": 9.7 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:07.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41900452, "accuracy": 5 },
+      "speedMps": 1.2,
+      "headingDegrees": 90,
+      "acceleration": { "x": -0.3, "y": 0.4, "z": 10.1 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:08.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41899088, "accuracy": 5 },
+      "speedMps": 1.22,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.4, "y": -0.2, "z": 9.5 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:09.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41897724, "accuracy": 6 },
+      "speedMps": 1.18,
+      "headingDegrees": 90,
+      "acceleration": { "x": -0.6, "y": 0.3, "z": 10.5 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:10.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.4189636, "accuracy": 5 },
+      "speedMps": 1.21,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.5, "y": -0.4, "z": 9.8 },
+      "stepCountDelta": 2,
+      "activity": "WALKING"
+    }
+  ]
+}

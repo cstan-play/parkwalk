@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared:
+    name: shared — typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck --workspace=@parkwalk/shared
+      - run: npm run build --workspace=@parkwalk/shared
+
+  backend:
+    name: backend — typecheck + unit tests
+    runs-on: ubuntu-latest
+    needs: shared
+    env:
+      DATABASE_URL: postgresql://parkwalk:parkwalk_dev@localhost:5432/parkwalk?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-secret-must-be-at-least-32-characters-long
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build --workspace=@parkwalk/shared
+      - run: npx prisma generate --schema=backend/prisma/schema.prisma
+      - run: npm run typecheck --workspace=@parkwalk/backend
+      - run: npm test --workspace=@parkwalk/backend
+
+  mobile-typecheck:
+    name: mobile — typecheck (no native build)
+    runs-on: ubuntu-latest
+    needs: shared
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build --workspace=@parkwalk/shared
+      - run: npm run typecheck --workspace=@parkwalk/mobile
+        continue-on-error: true
+        # Phase 1: typecheck is advisory only because native types
+        # (Pods, autolinked modules) aren't available on Linux.

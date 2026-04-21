@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.6
+# Multi-stage Dockerfile for the backend. Designed for Phase 2 Fly.io deploy,
+# committed now so we build against it locally as a smoke test.
+#
+# Fixes the bug in docs/11-DEPLOYMENT.md where `npm ci --only=production` was
+# run BEFORE `npm run build` (TS builds need devDependencies).
+
+# ---------- deps stage: install ALL deps including devDependencies ----------
+FROM node:20-bookworm-slim AS deps
+WORKDIR /repo
+
+COPY package.json package-lock.json* turbo.json tsconfig.base.json ./
+COPY shared/package.json ./shared/
+COPY backend/package.json ./backend/
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --workspaces --include-workspace-root --no-audit --no-fund
+
+# ---------- build stage: compile shared + backend ----------
+FROM deps AS build
+WORKDIR /repo
+
+COPY shared ./shared
+COPY backend ./backend
+
+RUN npm run build --workspace=@parkwalk/shared \
+ && npm run build --workspace=@parkwalk/backend \
+ && npx prisma generate --schema=backend/prisma/schema.prisma
+
+# ---------- runtime stage: prod deps only, small image ----------
+FROM node:20-bookworm-slim AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends dumb-init openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json* ./
+COPY shared/package.json ./shared/
+COPY backend/package.json ./backend/
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --workspaces --include-workspace-root --omit=dev --no-audit --no-fund \
+ && npm cache clean --force
+
+COPY --from=build /repo/shared/dist ./shared/dist
+COPY --from=build /repo/backend/dist ./backend/dist
+COPY --from=build /repo/backend/prisma ./backend/prisma
+COPY --from=build /repo/backend/node_modules/.prisma ./backend/node_modules/.prisma
+COPY --from=build /repo/backend/node_modules/@prisma ./backend/node_modules/@prisma
+
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser --system --uid 1001 nodejs \
+ && chown -R nodejs:nodejs /app
+USER nodejs
+
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+WORKDIR /app/backend
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/server.js"]

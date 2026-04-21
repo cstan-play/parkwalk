@@ -1,0 +1,40 @@
+name: parkwalk
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: parkwalk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: parkwalk
+      POSTGRES_PASSWORD: parkwalk_dev
+      POSTGRES_DB: parkwalk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-postgis.sql:/docker-entrypoint-initdb.d/00-init-postgis.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parkwalk -d parkwalk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: parkwalk-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:

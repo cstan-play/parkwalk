@@ -1,0 +1,116 @@
+{
+  "description": "Synthetic 10s driving fixture. ~15 m/s eastbound. Accelerometer is near-flat (vehicle-suspended). Activity reports AUTOMOTIVE. Should be rejected with maxSpeed + activity reasons.",
+  "summary": {
+    "windowSeconds": 10,
+    "sampleCount": 11,
+    "state": "VEHICLE_SUSPECTED",
+    "averageSpeedMps": 15.0,
+    "maxSpeedMps": 16.2,
+    "averageAccuracyMeters": 8,
+    "stepRateHz": 0.0,
+    "dominantActivity": "AUTOMOTIVE",
+    "validationScore": 0.1,
+    "generatedAt": "2026-04-20T10:00:10.000Z"
+  },
+  "samples": [
+    {
+      "timestamp": "2026-04-20T10:00:00.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.4191, "accuracy": 8 },
+      "speedMps": 14.8,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.05, "y": 0.02, "z": 9.82 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:01.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41893, "accuracy": 8 },
+      "speedMps": 15.1,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.03, "y": 0.04, "z": 9.8 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:02.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41876, "accuracy": 9 },
+      "speedMps": 15.3,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.02, "y": 0.01, "z": 9.85 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:03.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41859, "accuracy": 8 },
+      "speedMps": 15.5,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.04, "y": 0.02, "z": 9.83 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:04.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41842, "accuracy": 9 },
+      "speedMps": 15.7,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.03, "y": 0.03, "z": 9.84 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:05.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41825, "accuracy": 8 },
+      "speedMps": 16.0,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.02, "y": 0.02, "z": 9.81 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:06.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41807, "accuracy": 9 },
+      "speedMps": 16.2,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.04, "y": 0.01, "z": 9.82 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:07.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.4179, "accuracy": 8 },
+      "speedMps": 15.9,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.03, "y": 0.02, "z": 9.8 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:08.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41773, "accuracy": 9 },
+      "speedMps": 15.5,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.02, "y": 0.03, "z": 9.84 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:09.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41756, "accuracy": 8 },
+      "speedMps": 14.5,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.03, "y": 0.02, "z": 9.82 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    },
+    {
+      "timestamp": "2026-04-20T10:00:10.000Z",
+      "location": { "latitude": 37.7792, "longitude": -122.41739, "accuracy": 9 },
+      "speedMps": 14.0,
+      "headingDegrees": 90,
+      "acceleration": { "x": 0.04, "y": 0.03, "z": 9.81 },
+      "stepCountDelta": 0,
+      "activity": "AUTOMOTIVE"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/coverage
+**/*.log
+mobile
+docs
+.git
+.github
+.cursor

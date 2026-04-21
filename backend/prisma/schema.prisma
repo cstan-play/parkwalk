@@ -1,0 +1,137 @@
+// Phase 1 Prisma schema. Mirrors docs/02-DATABASE-SCHEMA.md with the Phase 1
+// subset (users, sessions, game_entities, user_collections, user_stats).
+// Activities/achievements/challenges deferred to Phase 2.
+//
+// Note: `location` is declared as Unsupported because Prisma has no first-
+// class PostGIS type. We add the column via a raw SQL migration and query
+// it through $queryRaw using ST_DWithin/ST_Distance.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, uuidOssp(map: "uuid-ossp")]
+}
+
+model User {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username     String   @unique @db.VarChar(50)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  displayName  String?  @map("display_name") @db.VarChar(100)
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  lastActiveAt DateTime @default(now()) @map("last_active_at") @db.Timestamptz
+  isActive     Boolean  @default(true) @map("is_active")
+  settings     Json     @default("{}")
+
+  stats           UserStats?
+  sessions        Session[]
+  collections     UserCollection[]
+  createdEntities GameEntity[]     @relation("EntityCreator")
+
+  @@map("users")
+}
+
+model Session {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  refreshTokenHash  String   @map("refresh_token_hash") @db.VarChar(255)
+  tokenVersion      Int      @default(0) @map("token_version")
+  deviceInfo        Json?    @map("device_info")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  lastUsedAt        DateTime @default(now()) @map("last_used_at") @db.Timestamptz
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz
+  ipAddress         String?  @map("ip_address") @db.Inet
+  userAgent         String?  @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model UserStats {
+  userId                 String    @id @map("user_id") @db.Uuid
+  totalDistanceMeters    BigInt    @default(0) @map("total_distance_meters")
+  dailyDistanceMeters    BigInt    @default(0) @map("daily_distance_meters")
+  weeklyDistanceMeters   BigInt    @default(0) @map("weekly_distance_meters")
+  totalCollections       Int       @default(0) @map("total_collections")
+  dailyCollections       Int       @default(0) @map("daily_collections")
+  weeklyCollections      Int       @default(0) @map("weekly_collections")
+  treasuresPlaced        Int       @default(0) @map("treasures_placed")
+  treasuresFoundByOthers Int       @default(0) @map("treasures_found_by_others")
+  totalWalkingMinutes    Int       @default(0) @map("total_walking_minutes")
+  dailyWalkingMinutes    Int       @default(0) @map("daily_walking_minutes")
+  currentStreakDays      Int       @default(0) @map("current_streak_days")
+  longestStreakDays      Int       @default(0) @map("longest_streak_days")
+  lastActivityDate       DateTime? @map("last_activity_date") @db.Date
+  dailyScore             Int       @default(0) @map("daily_score")
+  weeklyScore            Int       @default(0) @map("weekly_score")
+  allTimeScore           Int       @default(0) @map("all_time_score")
+  dailyResetAt           DateTime? @map("daily_reset_at") @db.Timestamptz
+  weeklyResetAt          DateTime? @map("weekly_reset_at") @db.Timestamptz
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([dailyScore(sort: Desc)])
+  @@index([weeklyScore(sort: Desc)])
+  @@index([allTimeScore(sort: Desc)])
+  @@map("user_stats")
+}
+
+model GameEntity {
+  id                     String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  type                   String    @db.VarChar(50)
+  creatorId              String?   @map("creator_id") @db.Uuid
+  /// PostGIS column added via raw SQL migration
+  location               Unsupported("geography(Point, 4326)")
+  active                 Boolean   @default(true)
+  visibleFrom            DateTime  @default(now()) @map("visible_from") @db.Timestamptz
+  visibleUntil           DateTime? @map("visible_until") @db.Timestamptz
+  config                 Json      @default("{}")
+  collectionRadiusMeters Int       @default(10) @map("collection_radius_meters")
+  maxCollections         Int?      @map("max_collections")
+  currentCollections     Int       @default(0) @map("current_collections")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  creator     User?            @relation("EntityCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  collections UserCollection[]
+
+  @@index([type, active])
+  @@map("game_entities")
+}
+
+model UserCollection {
+  id                         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                     String   @map("user_id") @db.Uuid
+  entityId                   String   @map("entity_id") @db.Uuid
+  collectedAt                DateTime @default(now()) @map("collected_at") @db.Timestamptz
+  /// PostGIS column added via raw SQL migration
+  userLocation               Unsupported("geography(Point, 4326)") @map("user_location")
+  distanceFromEntityMeters   Decimal  @map("distance_from_entity_meters") @db.Decimal(10, 2)
+  movementValidated          Boolean  @map("movement_validated")
+  movementState              String   @map("movement_state") @db.VarChar(50)
+  movementData               Json?    @map("movement_data")
+  pointsEarned               Int      @default(0) @map("points_earned")
+  idempotencyKey             String?  @map("idempotency_key") @db.VarChar(128)
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity GameEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId], name: "unique_user_entity_collection")
+  @@unique([userId, idempotencyKey], name: "unique_user_idempotency")
+  @@index([userId, collectedAt(sort: Desc)])
+  @@index([entityId, collectedAt(sort: Desc)])
+  @@map("user_collections")
+}

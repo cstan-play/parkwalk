@@ -1,0 +1,44 @@
+"""# Social Walking Game - Cursor AI Project Rules
+
+## 1. Project Context & Purpose
+- **Product**: A location-based social walking game focused on "Passive Collection" and authentic movement validation.
+- **Goal**: Encourage social walking through a gamified custom map experience.
+- **Anti-Cheat**: Real-time validation of walking vs. vehicle movement is the core USP.
+
+## 2. Tech Stack & Infrastructure
+- **Mobile**: React Native (iOS-first MVP) using `@rnmapbox/maps`.
+- **Backend**: Node.js/Express with Prisma ORM and PostgreSQL/PostGIS.
+- **Web**: React with Mapbox GL JS and Tailwind CSS for the admin/dashboard.
+- **State Management**: Zustand (Mobile/Web).
+- **API**: REST for general data; Socket.io for real-time social/leaderboard updates.
+- **Notifications**: `@notifee/react-native` (UI/Local) and `react-native-firebase/messaging` (Remote).
+
+## 3. Core Architecture Rules
+- **Map Provider**: NEVER use Google Maps or Apple Maps. ALWAYS use Mapbox.
+- **Database (PostGIS)**: All spatial queries must use PostGIS syntax (e.g., `ST_DWithin`, `ST_MakePoint`). Locations must be stored as `Geography(Point, 4326)`.
+- **Game Entities**: Follow the Plugin Architecture in `08-GAME-ENTITIES.md`. Do not hardcode logic for Treasures, Collectibles, or Challenges in the main services.
+- **Movement Validation**: All collection attempts must be validated server-side using the multi-sensor fusion logic (GPS + Accelerometer).
+
+## 4. Domain Logic & Constants
+- **Walking Threshold**: `MAX_WALKING_SPEED = 2.5 m/s` (approx. 9 km/h).
+- **GPS Accuracy**: Ignore or mark as 'SUSPICIOUS' any location data with accuracy > 20 meters.
+- **Collection Radius**: Default interaction radius is 10 meters unless specified by the entity config.
+- **Cheat Detection**: If GPS moves > 50m but the accelerometer shows no step activity, flag as possible spoofing.
+
+## 5. Notification Standards
+- **Proximity Alerts**: Use Local Notifications (Notifee) for immediate feedback when walking near items.
+- **Social Alerts**: Use Remote Push (FCM) for friend activities and global events.
+- **Deep Linking**: All notifications must support deep-linking to specific map coordinates or entity detail screens.
+
+## 6. Coding & Style Guidelines
+- **TypeScript**: Mandatory strict typing for all new files.
+- **Validation**: Use Zod for all API request validation and entity configuration schemas.
+- **Hooks**: Use functional components and custom hooks (e.g., `useMovementDetection`, `useNearbyEntities`).
+- **Testing**: Follow the 70/20/10 pyramid. Every new service or utility requires a `.test.ts` file.
+
+## 7. File References
+- Database Schema: `docs/02-DATABASE-SCHEMA.md`
+- Movement Detection: `docs/07-MOVEMENT-DETECTION.md`
+- Entity Plugins: `docs/08-GAME-ENTITIES.md`
+- Map Styling: `docs/09-MAPBOX-INTEGRATION.md`
+"""
