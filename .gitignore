@@ -41,17 +41,18 @@ yarn-error.log*
 # Prisma
 backend/prisma/migrations/dev.db*
 
-# React Native
+# React Native — iOS
 mobile/ios/Pods/
 mobile/ios/build/
 mobile/ios/DerivedData/
 mobile/ios/*.xcworkspace/xcuserdata/
 mobile/ios/*.xcodeproj/xcuserdata/
 mobile/ios/*.xcodeproj/project.xcworkspace/xcuserdata/
-mobile/android/build/
-mobile/android/.gradle/
-mobile/android/app/build/
-mobile/android/local.properties
+
+# React Native — Android (deferred to Phase 2; keep generated files
+# on disk for a future switch, but do not track them in git)
+mobile/android/
+
 mobile/.expo/
 mobile/.metro-cache/
 
