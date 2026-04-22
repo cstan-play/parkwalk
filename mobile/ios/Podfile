@@ -4,8 +4,21 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+# react-native-permissions: hoisted to repo-root node_modules via npm workspaces.
+require_relative '../../node_modules/react-native-permissions/scripts/setup'
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
+
+# Register the iOS permission handlers we actually use. Each name maps to a
+# CocoaPods subspec of react-native-permissions. Without this, the native
+# module exports no constants and the JS bridge crashes at startup with
+# "No permission handler detected".
+setup_permissions([
+  'LocationWhenInUse',
+  'LocationAlways',
+  'Motion',
+])
 
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
