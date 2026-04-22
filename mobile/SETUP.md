@@ -165,3 +165,27 @@ changes needed.
   3000 — System Settings → Network → Firewall → allow Node.
 - **Constant "Background Location Indicator"**: expected behavior when
   `UIBackgroundModes: location` is enabled and the app is using GPS.
+
+## Real-world gotchas (Apr 2026, Xcode 26 + RN 0.73 + npm workspaces)
+
+The Apr 2026 bootstrap surfaced seven issues that the "happy path" above
+does not anticipate. All seven are already fixed on the `bootstrap/ios`
+branch — a fresh clone will build clean. If you ever re-bootstrap from
+scratch (new Mac, RN upgrade, etc.) and hit any of these again, read
+`docs/13-BOOTSTRAP-IOS.md` for the full diagnosis and the commit trail.
+Quick cheat-sheet:
+
+| Symptom | Fix |
+|---|---|
+| `react-native init` nukes committed files | `git checkout HEAD -- mobile/` |
+| Pod install: `cannot load '@rnmapbox/maps/scripts/install'` | Podfile must call `$RNMapboxMaps.pre/post_install(installer)` inside hook blocks; don't set `$RNMapboxMapsDownloadToken = ''` |
+| Build: `with-environment.sh: No such file or directory` | `project.pbxproj` "Bundle React Native code and images" script: `../node_modules/` → `../../node_modules/` (monorepo hoists to root) |
+| `built for newer iOS-simulator (14.0) than linked (13.4)` warnings | Main target's `IPHONEOS_DEPLOYMENT_TARGET` → `14.0` (to match Podfile) |
+| Metro: `Cannot find module 'babel-plugin-module-resolver'` | `npm i --workspace=mobile -D babel-plugin-module-resolver` |
+| Metro: `Unable to resolve ./foo.js from shared/src/...` | Add `resolveRequest` `.js`→`.ts` fallback to `mobile/metro.config.js` |
+| App crashes at JS start: `[Permissions] No permission handler detected` | Podfile must call `setup_permissions(['LocationWhenInUse', 'LocationAlways', 'Motion'])` |
+
+**Key rule for our monorepo**: any relative `require_relative` or shell
+script in `mobile/ios/**` that references `node_modules` must use
+`../../node_modules/` (two levels up), not `../node_modules/`. npm
+workspaces hoist all deps to the repo root.
