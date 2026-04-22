@@ -2,93 +2,73 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleDisplayName</key>
-  <string>ParkWalk</string>
-  <key>CFBundleExecutable</key>
-  <string>$(EXECUTABLE_NAME)</string>
-  <key>CFBundleIdentifier</key>
-  <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>$(PRODUCT_NAME)</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$(MARKETING_VERSION)</string>
-  <key>CFBundleSignature</key>
-  <string>????</string>
-  <key>CFBundleVersion</key>
-  <string>$(CURRENT_PROJECT_VERSION)</string>
-  <key>LSRequiresIPhoneOS</key>
-  <true/>
-
-  <!-- Location: foreground -->
-  <key>NSLocationWhenInUseUsageDescription</key>
-  <string>ParkWalk uses your location to show nearby collectibles and detect that you are walking.</string>
-  <!-- Location: background + always (needed for "Always" permission) -->
-  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-  <string>ParkWalk tracks your walking in the background so you can collect items with the screen off.</string>
-  <key>NSLocationAlwaysUsageDescription</key>
-  <string>ParkWalk tracks your walking in the background so you can collect items with the screen off.</string>
-
-  <!-- Motion / accelerometer for walking-vs-vehicle classification -->
-  <key>NSMotionUsageDescription</key>
-  <string>ParkWalk reads motion sensors to verify you are actually walking rather than being driven.</string>
-
-  <!-- Background modes: location updates keeps GPS alive during walks. -->
-  <key>UIBackgroundModes</key>
-  <array>
-    <string>location</string>
-    <string>fetch</string>
-  </array>
-
-  <!--
-    App Transport Security: allow plain HTTP ONLY to RFC1918 LAN IPs so that
-    the Debug build can reach your Mac running `npm run dev` on 192.168.x.x
-    or 10.x.x.x. Release builds should remove this block entirely once you
-    deploy the backend (Phase 2 Fly.io, HTTPS-only).
-
-    If your Mac is on a different IP range, add an NSExceptionDomains entry
-    for it, OR use ngrok (https) instead — which does NOT require any ATS
-    exception.
-  -->
-  <key>NSAppTransportSecurity</key>
-  <dict>
-    <key>NSAllowsLocalNetworking</key>
-    <true/>
-    <key>NSAllowsArbitraryLoadsInWebContent</key>
-    <false/>
-    <key>NSAllowsArbitraryLoads</key>
-    <false/>
-    <key>NSExceptionDomains</key>
-    <dict>
-      <!-- Mac LAN IP (en0) at time of bootstrap. Update if your IP changes. -->
-      <key>10.26.4.68</key>
-      <dict>
-        <key>NSIncludesSubdomains</key>
-        <false/>
-        <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
-        <true/>
-        <key>NSTemporaryExceptionMinimumTLSVersion</key>
-        <string>TLSv1.2</string>
-      </dict>
-    </dict>
-  </dict>
-
-  <key>UILaunchStoryboardName</key>
-  <string>LaunchScreen</string>
-  <key>UIRequiredDeviceCapabilities</key>
-  <array>
-    <string>arm64</string>
-  </array>
-  <key>UISupportedInterfaceOrientations</key>
-  <array>
-    <string>UIInterfaceOrientationPortrait</string>
-  </array>
-  <key>UIViewControllerBasedStatusBarAppearance</key>
-  <false/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>ParkWalk</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>10.26.4.68</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSTemporaryExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+			</dict>
+		</dict>
+	</dict>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>ParkWalk tracks your walking in the background so you can collect items with the screen off.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>ParkWalk tracks your walking in the background so you can collect items with the screen off.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ParkWalk uses your location to show nearby collectibles and detect that you are walking.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>ParkWalk reads motion sensors to verify you are actually walking rather than being driven.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 </dict>
 </plist>
