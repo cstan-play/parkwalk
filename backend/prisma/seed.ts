@@ -8,18 +8,31 @@ const prisma = new PrismaClient();
  * Seeds a ring of collectibles around SEED_CENTER_LAT/LNG. Drop a GPS pin in
  * Apple Maps / Google Maps at wherever you plan to walk and paste into your
  * backend/.env. Then run `npm run prisma:seed`.
+ *
+ * SEED_SCATTER_METERS controls the radius of the random scatter (default 500m).
+ * Wider scatter in urban/suburban areas increases the chance that at least some
+ * markers land on publicly walkable terrain; see docs/13-BOOTSTRAP-IOS.md
+ * Phase-1.5 follow-up #1 for the planned "snap to walkable ways" upgrade.
  */
 async function main(): Promise<void> {
   const centerLat = Number(process.env.SEED_CENTER_LAT ?? 37.7749);
   const centerLng = Number(process.env.SEED_CENTER_LNG ?? -122.4194);
   const count = Number(process.env.SEED_ENTITY_COUNT ?? 15);
+  const scatter = Number(process.env.SEED_SCATTER_METERS ?? 500);
 
-  if (Number.isNaN(centerLat) || Number.isNaN(centerLng) || Number.isNaN(count)) {
-    throw new Error('Invalid SEED_CENTER_LAT / SEED_CENTER_LNG / SEED_ENTITY_COUNT');
+  if (
+    Number.isNaN(centerLat) ||
+    Number.isNaN(centerLng) ||
+    Number.isNaN(count) ||
+    Number.isNaN(scatter)
+  ) {
+    throw new Error(
+      'Invalid SEED_CENTER_LAT / SEED_CENTER_LNG / SEED_ENTITY_COUNT / SEED_SCATTER_METERS',
+    );
   }
 
   console.warn(
-    `Seeding ${count} entities around (${centerLat}, ${centerLng}) with a ~200m spread`,
+    `Seeding ${count} entities around (${centerLat}, ${centerLng}) with a ~${scatter}m spread`,
   );
 
   // Clear prior seed data (safe in dev: deletes everything).
@@ -27,7 +40,12 @@ async function main(): Promise<void> {
   await prisma.$executeRawUnsafe(`DELETE FROM game_entities`);
 
   for (let i = 0; i < count; i++) {
-    const { lat, lng } = offsetMeters(centerLat, centerLng, 200 * Math.random(), 360 * Math.random());
+    const { lat, lng } = offsetMeters(
+      centerLat,
+      centerLng,
+      scatter * Math.random(),
+      360 * Math.random(),
+    );
     const isRare = i % 5 === 0;
     const points = isRare ? 100 : 10;
     const radius = isRare ? 15 : 10;
