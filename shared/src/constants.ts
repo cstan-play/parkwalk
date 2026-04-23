@@ -8,7 +8,13 @@
 
 export const MAX_WALKING_SPEED_MPS = 2.5;
 
-export const GPS_MAX_ACCURACY_METERS = 20;
+// Raised from 20 -> 35 after first-walk telemetry: iOS reports
+// horizontalAccuracy in the 15-25 m range in dense urban real-world
+// conditions even with `kCLLocationAccuracyBestForNavigation`. Keeping the
+// rule at 20 m was starving the movement window; 35 m still catches
+// obvious spoofing/drift (GPS_SPOOF sits well above) without discarding
+// legitimate walking fixes. See docs/07-MOVEMENT-DETECTION.md.
+export const GPS_MAX_ACCURACY_METERS = 35;
 
 export const DEFAULT_COLLECTION_RADIUS_M = 10;
 

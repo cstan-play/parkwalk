@@ -29,7 +29,8 @@ const envSchema = z.object({
   SEED_CENTER_LAT: z.coerce.number().gte(-90).lte(90).default(37.7749),
   SEED_CENTER_LNG: z.coerce.number().gte(-180).lte(180).default(-122.4194),
   SEED_ENTITY_COUNT: z.coerce.number().int().min(1).max(500).default(15),
-  SEED_SCATTER_METERS: z.coerce.number().int().min(50).max(5000).default(500),
+  SEED_SCATTER_METERS: z.coerce.number().int().min(15).max(5000).default(500),
+  SEED_MIN_SPACING_METERS: z.coerce.number().int().min(5).max(500).default(12),
 });
 
 export type Env = z.infer<typeof envSchema>;

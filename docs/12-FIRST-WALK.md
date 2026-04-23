@@ -101,12 +101,19 @@ cd backend && npm run prisma:seed
 ## Step 6 — The actual walk
 
 - Put on shoes.
-- Leave the app in the foreground and start walking outside (GPS indoors
-  is usually too noisy).
-- Within ~15 seconds, the overlay should say **state: WALKING_VALID**.
+- Leave the app in the foreground and start walking outside when you can
+  (GPS indoors on a campus can work but expect ±15–40 m accuracy; the app
+  uses uncertainty-aware distance for collects).
+- Within ~15 seconds, the overlay should often say **state: WALKING_VALID**
+  while moving (speed is the primary signal; see `docs/07-MOVEMENT-DETECTION.md`).
 - As you approach a seeded collectible, its marker should appear and you
-  should be able to tap it.
-- Tap → collect → success toast → `+N points`.
+  can **tap the marker** to collect (there is no separate collect button).
+- Watch **nearest: Xm ±Ym (need ≤Nm)** in the overlay — that is live distance
+  and GPS uncertainty vs the entity radius; it should line up with server
+  behavior better than the cached distance from the last `/nearby` response.
+- Tap → collect → success alert → `+N points`. The marker should **disappear**
+  on the next nearby refetch (up to ~30 s) because the API excludes entities
+  you already collected.
 
 ## Step 7 — Verify on the server
 
@@ -130,13 +137,18 @@ psql 'postgresql://parkwalk:parkwalk_dev@localhost:5432/parkwalk' \
 
 ## Step 8 — Adversarial tests (this is the proof of the USP)
 
-### Stationary reject
+### Stationary / low-motion collect
 
-- Sit still indoors with the app open for 30 seconds.
-- Move next to a seeded collectible (walk to one first).
+- Sit still indoors with the app open for 30 seconds next to a marker you
+  have not collected.
 - Try to collect while still.
-- Expected: `Cannot collect — Current movement state: STATIONARY…`
-  Server never sees the request because the client blocks it.
+- **Current behavior:** the map does **not** gate collects on
+  `WALKING_VALID` — taps still reach the server if you are within the
+  uncertainty-aware radius and movement validation passes (samples present,
+  no teleport/vehicle hard rejects). The server may record soft flags such as
+  `CLIENT_STATE_NOT_WALKING` or `NO_STEPS_DURING_MOVEMENT`. Tightening this
+  (require walking state or steps for collect) is a product decision, not
+  implemented today.
 
 ### Vehicle reject
 
@@ -160,12 +172,22 @@ regressions can compare against real data, not synthetic.
 
 ## If something fails
 
+- **Registration / login: "Network error" or timeout**: On a **physical
+  iPhone**, `http://127.0.0.1:3000` or `localhost` points at the **phone**,
+  not your Mac. Open **API / server URL** from onboarding, sign-in, or
+  register (or **Settings** after you’re in), set **LAN** to
+  `http://<mac-lan-ip>:3000`, tap **Use LAN**, then try again. If you
+  previously used the simulator, uninstall the app or clear storage so old
+  loopback URLs are not stuck — the app now auto-replaces persisted loopback
+  with `mobile/.env`’s `API_BASE_URL` when you rebuild. Also confirm
+  `http://<same-ip>:3000/health` works in **Safari on the phone**.
 - **Map loads but state stays UNKNOWN**: GPS has no samples. Walk outdoors
   with open sky. If still stuck, check that location permission is
   `Always` and motion is `Allowed`.
-- **Collect button never enables**: you're outside the collection radius OR
-  movement state is not `WALKING_VALID` (overlay shows which). Start
-  walking again.
+- **Tap says "Too far" while the dot looks close**: check **nearest: Xm ±Ym**
+  on the overlay — stale map perception vs true fix, or GPS uncertainty.
+  Walk a few meters; if it persists, compare with `docs/07-MOVEMENT-DETECTION.md`
+  (uncertainty-aware collect).
 - **Collect returns 400 MOVEMENT_INVALID while walking**: compare the
   rejected summary with `walking.json` fixture. Most common causes: GPS
   accuracy too poor (urban canyon), or step count delta too low (holding

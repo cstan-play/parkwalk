@@ -25,9 +25,11 @@ export const activityRecognitionSchema = z.enum([
 export type ActivityRecognition = z.infer<typeof activityRecognitionSchema>;
 
 /**
- * A single raw sensor sample. The mobile client may include an array of these
- * for server-side audit/replay. The server validator can run on either this
- * array OR the summary below. Shape mirrors `docs/07-MOVEMENT-DETECTION.md`.
+ * A single raw sensor sample. Collect requests should include a non-empty
+ * array of these so the server can run teleport/automotive replay checks
+ * (`validateMovement` hard-rejects if samples are missing). Narrative:
+ * `docs/07-MOVEMENT-DETECTION.md`; this Zod schema is the wire-shape source
+ * of truth.
  */
 export const movementSampleSchema = z.object({
   timestamp: timestampSchema,
@@ -48,8 +50,8 @@ export type MovementSample = z.infer<typeof movementSampleSchema>;
 
 /**
  * A lightweight summary computed by the client over a rolling window.
- * Acceptable to the server in place of a full sample array for low-bandwidth
- * collect requests. Server MAY re-run validation if samples are also attached.
+ * Always sent with collect; the server uses it together with `samples`
+ * (samples are required for a successful collect today).
  */
 export const movementSummarySchema = z.object({
   windowSeconds: z.number().int().min(5).max(300),
@@ -65,10 +67,31 @@ export const movementSummarySchema = z.object({
 });
 export type MovementSummary = z.infer<typeof movementSummarySchema>;
 
+/**
+ * Soft-flag codes emitted by the server validator. These do NOT block a
+ * collect; they are persisted into `collection_log.movement_data.flags`
+ * for later analytics / anti-cheat triage. Hard rejects land in `reasons`
+ * and produce `valid: false`.
+ *
+ * Kept as a string enum rather than booleans so the set can grow without
+ * breaking stored JSONB shapes.
+ */
+export const movementFlagSchema = z.enum([
+  'LOW_GPS_ACCURACY',
+  'NO_STEPS_DURING_MOVEMENT',
+  'UNKNOWN_ACTIVITY',
+  'STALE_SUMMARY',
+  'CLIENT_STATE_NOT_WALKING',
+  'LOW_CLIENT_SCORE',
+  'FLAT_ACCELEROMETER_WITH_GPS',
+]);
+export type MovementFlag = z.infer<typeof movementFlagSchema>;
+
 export const movementValidationResultSchema = z.object({
   valid: z.boolean(),
   state: movementStateSchema,
   score: z.number().min(0).max(1),
   reasons: z.array(z.string()),
+  flags: z.array(movementFlagSchema).default([]),
 });
 export type MovementValidationResult = z.infer<typeof movementValidationResultSchema>;

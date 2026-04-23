@@ -31,6 +31,12 @@ export function OnboardingScreen({ navigation }: Props): JSX.Element {
       <Text style={styles.status}>
         Location: {permissions.location} • Motion: {permissions.motion}
       </Text>
+      <View style={styles.spacer} />
+      <Button
+        title="API / server URL (if login fails)"
+        onPress={() => navigation.navigate('Settings')}
+        color="#555"
+      />
     </View>
   );
 }

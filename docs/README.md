@@ -1,17 +1,54 @@
-# Location-Based Walking Game - MVP Documentation
+# ParkWalk - MVP + Alpha Documentation
 
 ## Project Overview
 
 A cross-platform location-based social walking game where users collect items, hide treasures, and participate in challenges while walking in their city. The system validates that users are genuinely walking (not driving/biking) using GPS and device sensors.
 
-## Key Features
+## Scope: MVP + Alpha (not just "minimum viable")
 
-### MVP Scope
-- **Movement Detection**: Validates genuine walking using GPS + accelerometer + activity recognition
-- **Collectibles System**: Fixed spawn points and user-placed treasures
-- **Custom Map**: Unique visual style using Mapbox
-- **Web Dashboard**: Map management, leaderboards, stats, activity feed
-- **Social Foundation**: Infrastructure for future social features (friends, shared challenges)
+> **Why the name matters.** A pure MVP cuts corners to prove the idea. ParkWalk
+> is instead being built as a **MVP + Alpha**: the thinnest end-to-end slice
+> still uses production-grade architecture, so every follow-up feature can be
+> layered on without a rewrite. That means: solid domain boundaries, typed
+> schemas, tested services, server-side anti-cheat, and infra-as-code from day
+> one — even when only a single tester is walking around with an iPhone.
+>
+> In practice the priority stack is:
+>
+> 1. **End-to-end walk loop on a real iPhone** (this is the MVP kernel).
+> 2. **Architectural integrity** — no "we'll refactor later" debt.
+> 3. **Alpha-grade product polish** — offline tiles, walkable-way snapping,
+>    auth refresh, friends graph, leaderboards, web dashboard — built on top
+>    of the same kernel.
+
+### Phase 1 — walk-loop kernel (in progress)
+- **Movement Detection**: genuine walking validation via GPS + accelerometer
+  + activity recognition, server-side double-check.
+- **Collectibles System**: fixed spawn points with Poisson-disc seeding
+  (no overlapping collection radii), user-placed treasures.
+- **Custom Map**: Mapbox Streets today, custom style imminent.
+- **Auth**: JWT access + refresh tokens, keychain-backed login today; **silent
+  refresh on 401** and **explicit logout/revoke** are Alpha-scope polish (see
+  `docs/13-BOOTSTRAP-IOS.md` follow-ups).
+
+### Phase 1 — Alpha product features (scheduled, not "deferred")
+- **Offline map tiles** — Mapbox OfflineManager so a dropped LAN/cellular
+  signal doesn't blank the map mid-walk.
+- **Walkable-way snapping** — seed script snaps random candidates to the
+  nearest OSM footway/sidewalk/path so markers land on terrain a player can
+  actually reach.
+- **Friends graph + activity feed** — infrastructure in the schema today,
+  surfaced before end-users see the app.
+- **Leaderboards** — daily/weekly/all-time scores (already tracked in
+  `UserStats`).
+- **Web dashboard** — map management, moderation, stats, activity feed.
+
+### Phase 2 — post-Alpha
+- Android build (iOS-first during Alpha; schema + shared pkg are already
+  cross-platform).
+- Remote push via FCM for social/global alerts.
+- Socket.io real-time leaderboard (polling works for Alpha).
+- Challenges + events engine.
 
 ## Platform Support
 
@@ -58,7 +95,10 @@ docs/
 ├── 08-GAME-ENTITIES.md         # Collectibles, treasures, challenges system
 ├── 09-MAPBOX-INTEGRATION.md    # Custom map styling & implementation
 ├── 10-TESTING-STRATEGY.md      # Testing approach & tools
-└── 11-DEPLOYMENT.md            # Production deployment guide
+├── 11-DEPLOYMENT.md            # Production deployment guide
+├── 12-FIRST-WALK.md            # First end-to-end walk checklist
+├── 13-BOOTSTRAP-IOS.md         # iOS bootstrap log + Alpha follow-ups
+└── 14-DEPLOY-RAILWAY.md        # Railway deploy (monorepo + PostGIS)
 ```
 
 ## Quick Start (Development)
@@ -110,13 +150,17 @@ npm run dev
 6. **Testing**: Validate movement detection accuracy
 7. **Polish**: UI/UX refinement
 
-## MVP Development Timeline
+## MVP + Alpha Development Timeline
 
-- **Week 1-2**: Backend infrastructure + movement detection
-- **Week 3-4**: Mobile app core + Mapbox integration
-- **Week 5-6**: Game entity system + collection mechanics
-- **Week 7**: Web dashboard
-- **Week 8**: Integration, testing, polish
+- **Week 1-2**: Backend infrastructure + movement detection (DONE)
+- **Week 3-4**: Mobile app core + Mapbox integration + iOS bootstrap (DONE,
+  see `13-BOOTSTRAP-IOS.md`)
+- **Week 5-6**: Game entity system + collection mechanics + first end-to-end
+  walk (IN PROGRESS)
+- **Week 7**: Offline tiles, walkable-way snapping, auth refresh + logout
+- **Week 8**: Friends graph + activity feed + leaderboards
+- **Week 9**: Web dashboard (map management, moderation, stats)
+- **Week 10**: Alpha hardening — tests, observability, deployment guide
 
 ## Key Decisions & Rationale
 

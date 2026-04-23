@@ -15,10 +15,14 @@ describe('MovementValidationService', () => {
       expect(result.score).toBeGreaterThan(0.8);
     });
 
-    it('is ACCEPTED even with the summary alone (no samples)', () => {
+    it('is REJECTED when samples are missing (summary alone is not enough)', () => {
+      // Previously accepted; flipped per the MVP+Alpha model. Raw samples
+      // are the server's only way to replay the walk (teleport + automotive
+      // checks live there), so a collect without samples cannot be verified.
       const fx = rebaseFixtureToNow(walkingFixture);
       const result = validateMovement({ summary: fx.summary });
-      expect(result.valid).toBe(true);
+      expect(result.valid).toBe(false);
+      expect(result.reasons.join('|')).toMatch(/samples/i);
     });
   });
 
@@ -43,24 +47,58 @@ describe('MovementValidationService', () => {
   });
 
   describe('freshness', () => {
-    it('REJECTS a summary older than 60s', () => {
+    it('SOFT-FLAGS a summary older than 60s (staleness is evidence, not a gate)', () => {
+      // Previously a hard reject; moved to a soft flag per the MVP+Alpha
+      // soft-validation model (docs/07-MOVEMENT-DETECTION.md). The server
+      // still re-verifies position with ST_DWithin using the request's
+      // `location` field, so a stale summary cannot by itself let a user
+      // collect from the wrong place.
+      const fx = rebaseFixtureToNow(walkingFixture);
       const stale = {
-        ...walkingFixture.summary,
+        ...fx.summary,
         generatedAt: new Date(Date.now() - 120_000).toISOString(),
       };
-      const result = validateMovement({ summary: stale });
-      expect(result.valid).toBe(false);
-      expect(result.reasons.join('|')).toMatch(/stale/);
+      const result = validateMovement({ summary: stale, samples: fx.samples });
+      expect(result.valid).toBe(true);
+      expect(result.flags).toContain('STALE_SUMMARY');
     });
 
     it('REJECTS a summary with a future timestamp', () => {
+      const fx = rebaseFixtureToNow(walkingFixture);
       const future = {
-        ...walkingFixture.summary,
+        ...fx.summary,
         generatedAt: new Date(Date.now() + 120_000).toISOString(),
       };
-      const result = validateMovement({ summary: future });
+      const result = validateMovement({ summary: future, samples: fx.samples });
       expect(result.valid).toBe(false);
       expect(result.reasons.join('|')).toMatch(/future/);
+    });
+  });
+
+  describe('soft flags on the happy path', () => {
+    it('walking with UNKNOWN activity flags UNKNOWN_ACTIVITY but accepts', () => {
+      const fx = rebaseFixtureToNow(walkingFixture);
+      const summary = { ...fx.summary, dominantActivity: 'UNKNOWN' as const };
+      const result = validateMovement({ summary, samples: fx.samples });
+      expect(result.valid).toBe(true);
+      expect(result.flags).toContain('UNKNOWN_ACTIVITY');
+    });
+
+    it('walking with zero step rate + non-zero speed flags NO_STEPS_DURING_MOVEMENT but accepts', () => {
+      const fx = rebaseFixtureToNow(walkingFixture);
+      const summary = { ...fx.summary, stepRateHz: 0 };
+      const result = validateMovement({ summary, samples: fx.samples });
+      expect(result.valid).toBe(true);
+      expect(result.flags).toContain('NO_STEPS_DURING_MOVEMENT');
+    });
+  });
+
+  describe('missing samples', () => {
+    it('REJECTS a collect with no samples attached', () => {
+      const fx = rebaseFixtureToNow(walkingFixture);
+      const result = validateMovement({ summary: fx.summary, samples: [] });
+      expect(result.valid).toBe(false);
+      expect(result.reasons.join('|')).toMatch(/samples/i);
     });
   });
 });

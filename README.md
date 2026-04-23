@@ -82,13 +82,15 @@ open ios/ParkWalk.xcworkspace
 
 ## Testing the full walk
 
-See `docs/12-FIRST-WALK.md` once it's written, or the "First-walk checklist" section in the foundation plan (`.cursor/plans/`).
+See `docs/12-FIRST-WALK.md` for the full checklist.
 
 Quick version:
 1. `npm run infra:up` then `cd backend && npm run dev`.
 2. Check `curl http://<mac-lan-ip>:3000/health` from both Mac and iPhone Safari.
 3. Build & Run on iPhone from Xcode.
-4. Register, walk outside 100m, confirm state flips to `WALKING_VALID`, collect a seeded entity.
+4. Register, walk until the overlay often shows `WALKING_VALID`, tap a nearby
+   marker to collect (see `docs/07-MOVEMENT-DETECTION.md` for movement +
+   distance rules).
 
 ## Phase 1 scope (what this repo does today)
 

@@ -20,9 +20,20 @@ export interface NearbyRow {
 
 export async function findNearbyEntities(
   db: PrismaClient | Prisma.TransactionClient,
-  params: { lat: number; lng: number; radiusMeters: number; type?: string; limit: number },
+  params: {
+    userId: string;
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+    type?: string;
+    limit: number;
+  },
 ): Promise<NearbyRow[]> {
-  const { lat, lng, radiusMeters, type, limit } = params;
+  const { userId, lat, lng, radiusMeters, type, limit } = params;
+  // NOT EXISTS on user_collections drops entities this user has already
+  // collected so the map doesn't re-show a marker the player just picked up.
+  // Checked per-user (not globally) because entities with max_collections > 1
+  // remain available to other players.
   if (type) {
     return db.$queryRaw<NearbyRow[]>`
       SELECT id,
@@ -40,11 +51,15 @@ export async function findNearbyEntities(
              ST_Y(location::geometry) AS lat,
              ST_X(location::geometry) AS lng,
              ST_Distance(location, ST_MakePoint(${lng}, ${lat})::geography) AS distance_meters
-      FROM game_entities
+      FROM game_entities ge
       WHERE active = true
         AND type = ${type}
         AND (visible_until IS NULL OR visible_until > NOW())
         AND ST_DWithin(location, ST_MakePoint(${lng}, ${lat})::geography, ${radiusMeters})
+        AND NOT EXISTS (
+          SELECT 1 FROM user_collections uc
+          WHERE uc.user_id = ${userId}::uuid AND uc.entity_id = ge.id
+        )
       ORDER BY distance_meters ASC
       LIMIT ${limit}
     `;
@@ -65,10 +80,14 @@ export async function findNearbyEntities(
            ST_Y(location::geometry) AS lat,
            ST_X(location::geometry) AS lng,
            ST_Distance(location, ST_MakePoint(${lng}, ${lat})::geography) AS distance_meters
-    FROM game_entities
+    FROM game_entities ge
     WHERE active = true
       AND (visible_until IS NULL OR visible_until > NOW())
       AND ST_DWithin(location, ST_MakePoint(${lng}, ${lat})::geography, ${radiusMeters})
+      AND NOT EXISTS (
+        SELECT 1 FROM user_collections uc
+        WHERE uc.user_id = ${userId}::uuid AND uc.entity_id = ge.id
+      )
     ORDER BY distance_meters ASC
     LIMIT ${limit}
   `;

@@ -33,7 +33,7 @@ export function buildEntitiesRouter(): Router {
     nearbyLimit,
     validate(nearbyQuerySchema, 'query'),
     async (req, res) => {
-      const items = await listNearby(req.query as never);
+      const items = await listNearby(req.user!.id, req.query as never);
       res.json({ items });
     },
   );

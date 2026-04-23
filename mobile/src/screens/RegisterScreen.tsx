@@ -5,10 +5,13 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { register } from '@/services/authApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { describeApiError } from '@/util/describeApiError';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 export function RegisterScreen({ navigation }: Props): JSX.Element {
+  const apiBaseUrl = useSettingsStore((s) => s.apiBaseUrl);
   const setAuthenticated = useAuthStore((s) => s.setAuthenticated);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -21,7 +24,7 @@ export function RegisterScreen({ navigation }: Props): JSX.Element {
       const res = await register({ username, email, password });
       await setAuthenticated(res.user, res.tokens);
     } catch (err) {
-      Alert.alert('Registration failed', describeError(err));
+      Alert.alert('Registration failed', describeApiError(err));
     } finally {
       setBusy(false);
     }
@@ -29,6 +32,9 @@ export function RegisterScreen({ navigation }: Props): JSX.Element {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.apiLine}>API: {apiBaseUrl}</Text>
+      <Button title="Change API / server URL…" onPress={() => navigation.navigate('Settings')} />
+      <View style={{ height: 16 }} />
       <Text style={styles.label}>Username</Text>
       <TextInput
         style={styles.input}
@@ -53,16 +59,9 @@ export function RegisterScreen({ navigation }: Props): JSX.Element {
   );
 }
 
-function describeError(err: unknown): string {
-  if (typeof err === 'object' && err && 'response' in err) {
-    const r = (err as { response?: { data?: { error?: { message?: string } } } }).response;
-    return r?.data?.error?.message ?? 'Unknown error';
-  }
-  return err instanceof Error ? err.message : 'Unknown error';
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, gap: 8 },
+  apiLine: { fontSize: 12, color: '#444' },
   label: { fontSize: 13, color: '#666' },
   input: {
     borderWidth: 1,

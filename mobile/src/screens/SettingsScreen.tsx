@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 
 export function SettingsScreen(): JSX.Element {
   const settings = useSettingsStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const logout = useAuthStore((s) => s.logout);
   const [lan, setLan] = useState(settings.savedLanUrl);
   const [ngrok, setNgrok] = useState(settings.savedNgrokUrl);
@@ -47,7 +48,9 @@ export function SettingsScreen(): JSX.Element {
       <Button title="Save URLs" onPress={save} />
 
       <View style={{ height: 32 }} />
-      <Button title="Sign out" color="#c00" onPress={() => logout()} />
+      {isAuthenticated ? (
+        <Button title="Sign out" color="#c00" onPress={() => logout()} />
+      ) : null}
     </View>
   );
 }

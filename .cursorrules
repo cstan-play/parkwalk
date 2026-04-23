@@ -20,10 +20,10 @@
 - **Movement Validation**: All collection attempts must be validated server-side using the multi-sensor fusion logic (GPS + Accelerometer).
 
 ## 4. Domain Logic & Constants
-- **Walking Threshold**: `MAX_WALKING_SPEED = 2.5 m/s` (approx. 9 km/h).
-- **GPS Accuracy**: Ignore or mark as 'SUSPICIOUS' any location data with accuracy > 20 meters.
-- **Collection Radius**: Default interaction radius is 10 meters unless specified by the entity config.
-- **Cheat Detection**: If GPS moves > 50m but the accelerometer shows no step activity, flag as possible spoofing.
+- **Walking Threshold**: `MAX_WALKING_SPEED_MPS = 2.5` in `shared/src/constants.ts` (approx. 9 km/h).
+- **GPS Accuracy**: Client classifier treats average accuracy above `GPS_MAX_ACCURACY_METERS` (35) as `SUSPICIOUS`; server logs worse accuracy as soft flag `LOW_GPS_ACCURACY`, not an automatic block. Constants live in `shared/src/constants.ts`.
+- **Collection Radius**: Default interaction radius is 10 meters unless specified by the entity config (`DEFAULT_COLLECTION_RADIUS_M`).
+- **Cheat Detection**: Server teleport check uses `TELEPORT_THRESHOLD_M` (50 m) with implied speed; sample-level automotive activity and flat-accelerometer + GPS patterns are documented in `docs/07-MOVEMENT-DETECTION.md`.
 
 ## 5. Notification Standards
 - **Proximity Alerts**: Use Local Notifications (Notifee) for immediate feedback when walking near items.

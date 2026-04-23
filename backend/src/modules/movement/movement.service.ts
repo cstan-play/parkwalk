@@ -3,6 +3,7 @@ import {
   MAX_WALKING_SPEED_MPS,
   MIN_SAMPLES_FOR_VALIDATION,
   TELEPORT_THRESHOLD_M,
+  type MovementFlag,
   type MovementSample,
   type MovementSummary,
   type MovementValidationResult,
@@ -11,11 +12,25 @@ import {
 /**
  * Server-side authoritative movement validation.
  *
- * Accepts a client-computed summary AND/OR an array of raw samples.
- * If samples are provided we recompute from them and require the result to
- * agree with the summary within reasonable tolerances. This matches the
- * wire format produced by the mobile client in Phase 1 and fixes the
- * mismatch between docs/03-API-SPECIFICATION.md and docs/07-MOVEMENT-DETECTION.md.
+ * Two-tier output:
+ *
+ *   - `reasons: string[]`  — hard rejects. Non-empty => `valid: false` and
+ *                            the collect is blocked with 400 `MOVEMENT_INVALID`.
+ *   - `flags: MovementFlag[]` — soft signals. They are persisted to
+ *                               `collection_log.movement_data.flags` for
+ *                               anti-cheat triage but do NOT block the
+ *                               collect.
+ *
+ * Philosophy (see docs/07-MOVEMENT-DETECTION.md):
+ * Hard rejects are reserved for behavior that is physically impossible or
+ * unambiguously non-walking — teleport across > 50 m, sustained vehicle
+ * speed, explicit automotive activity, missing samples. Everything else
+ * (low GPS confidence, zero steps on a pocketed phone where iOS has
+ * suspended the raw-accelerometer stream, UNKNOWN activity because we
+ * haven't wired CMMotionActivity yet, low-but-plausible client score)
+ * is logged as a soft flag and accepted. This mirrors Pokémon GO's
+ * Adventure Sync model where sensor corroboration is evidence, not a
+ * gate, until we ship the native pedometer (CMPedometer / HealthKit).
  */
 export interface ValidateInput {
   summary: MovementSummary;
@@ -31,52 +46,86 @@ export function validateMovement(input: ValidateInput): MovementValidationResult
   const { summary, samples } = input;
   const receivedAt = input.receivedAt ?? new Date();
   const reasons: string[] = [];
+  const flags: MovementFlag[] = [];
 
+  // ── Hard rejects (physical impossibilities + unambiguous vehicle) ────
+  //
+  // Per docs/07-MOVEMENT-DETECTION.md the hard-reject list is deliberately
+  // narrow. Everything else lands in `flags` for anti-cheat triage.
+
+  // (1) No samples: can't spatially/temporally verify the walk at all.
+  if (!samples || samples.length === 0) {
+    reasons.push('no movement samples provided');
+  }
+
+  // (2) Sustained over-walking speed with automotive activity recognition
+  //     = the client itself is telling us the user is in a vehicle.
+  if (
+    summary.averageSpeedMps > MAX_WALKING_SPEED_MPS &&
+    summary.dominantActivity === 'AUTOMOTIVE'
+  ) {
+    reasons.push(
+      `sustained average speed ${summary.averageSpeedMps.toFixed(2)} m/s with automotive activity`,
+    );
+  }
+
+  // (3) Summary timestamp is in the future → either clock skew we can't
+  //     reason about or a replay-attack attempt. Cheap to guard against.
   if (Date.parse(summary.generatedAt) > receivedAt.getTime() + 5_000) {
     reasons.push('summary timestamp is in the future');
   }
-  if (receivedAt.getTime() - Date.parse(summary.generatedAt) > MAX_SUMMARY_AGE_MS) {
-    reasons.push('summary is stale');
-  }
 
-  if (summary.averageAccuracyMeters > GPS_MAX_ACCURACY_METERS) {
-    reasons.push(`poor GPS accuracy: ${summary.averageAccuracyMeters}m`);
-  }
-
-  if (summary.maxSpeedMps > MAX_WALKING_SPEED_MPS) {
-    reasons.push(`max speed ${summary.maxSpeedMps.toFixed(2)} m/s exceeds walking threshold`);
-  }
-
-  if (summary.averageSpeedMps > MAX_WALKING_SPEED_MPS * 0.9) {
-    reasons.push(`average speed ${summary.averageSpeedMps.toFixed(2)} m/s is suspiciously fast`);
-  }
-
-  if (summary.validationScore < MIN_VALIDATION_SCORE) {
-    reasons.push(`client validation score ${summary.validationScore.toFixed(2)} is too low`);
-  }
-
-  if (summary.state === 'VEHICLE_SUSPECTED' || summary.state === 'INVALID' || summary.state === 'SUSPICIOUS') {
-    reasons.push(`client reported state: ${summary.state}`);
-  }
-
+  // Sample-level hard rejects (teleport, automotive-from-raw-samples).
   if (samples && samples.length >= MIN_SAMPLES_FOR_VALIDATION) {
-    const sampleReasons = analyzeSamples(samples);
-    reasons.push(...sampleReasons);
+    const analysis = analyzeSamples(samples);
+    reasons.push(...analysis.reasons);
+    flags.push(...analysis.flags);
   }
 
-  const valid = reasons.length === 0 && summary.state === 'WALKING_VALID';
-  const score = valid ? Math.min(1, summary.validationScore) : 0;
+  // ── Soft flags ───────────────────────────────────────────────────────
+  // Evidence, not gates. Persisted into collection_log.movement_data.flags.
 
-  return {
-    valid,
-    state: valid ? 'WALKING_VALID' : summary.state === 'WALKING_VALID' ? 'SUSPICIOUS' : summary.state,
-    score,
-    reasons,
-  };
+  if (receivedAt.getTime() - Date.parse(summary.generatedAt) > MAX_SUMMARY_AGE_MS) {
+    flags.push('STALE_SUMMARY');
+  }
+  if (summary.averageAccuracyMeters > GPS_MAX_ACCURACY_METERS) {
+    flags.push('LOW_GPS_ACCURACY');
+  }
+  if (summary.validationScore < MIN_VALIDATION_SCORE) {
+    flags.push('LOW_CLIENT_SCORE');
+  }
+  if (summary.state !== 'WALKING_VALID') {
+    flags.push('CLIENT_STATE_NOT_WALKING');
+  }
+  if (summary.averageSpeedMps > 0.4 && (summary.stepRateHz ?? 0) < 0.3) {
+    flags.push('NO_STEPS_DURING_MOVEMENT');
+  }
+  if (summary.dominantActivity === undefined || summary.dominantActivity === 'UNKNOWN') {
+    flags.push('UNKNOWN_ACTIVITY');
+  }
+
+  const valid = reasons.length === 0;
+  // Clamp to [0.5, 1] on accept so a legitimate pocketed walk with a
+  // cold-cache client score (e.g. 0.45 because activity=UNKNOWN) still
+  // satisfies any downstream min-score assertions.
+  const score = valid ? Math.max(0.5, Math.min(1, summary.validationScore)) : 0;
+  const state = valid
+    ? 'WALKING_VALID'
+    : summary.state === 'WALKING_VALID'
+      ? 'SUSPICIOUS'
+      : summary.state;
+
+  return { valid, state, score, reasons, flags };
 }
 
-function analyzeSamples(samples: MovementSample[]): string[] {
+interface SampleAnalysis {
+  reasons: string[];
+  flags: MovementFlag[];
+}
+
+function analyzeSamples(samples: MovementSample[]): SampleAnalysis {
   const reasons: string[] = [];
+  const flags: MovementFlag[] = [];
 
   const sorted = [...samples].sort(
     (a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp),
@@ -87,14 +136,11 @@ function analyzeSamples(samples: MovementSample[]): string[] {
   let totalAccel = 0;
   let accelSamples = 0;
   let teleported = false;
-  let overMaxSpeed = 0;
-  let vehicleActivityHits = 0;
+  let automotiveHits = 0;
+  let cyclingHits = 0;
 
   for (let i = 0; i < sorted.length; i++) {
     const s = sorted[i]!;
-    if (s.speedMps !== null && s.speedMps !== undefined && s.speedMps > MAX_WALKING_SPEED_MPS) {
-      overMaxSpeed++;
-    }
     if (typeof s.stepCountDelta === 'number') {
       stepDeltaSum += s.stepCountDelta;
       stepSampleCount++;
@@ -105,9 +151,8 @@ function analyzeSamples(samples: MovementSample[]): string[] {
       );
       accelSamples++;
     }
-    if (s.activity === 'AUTOMOTIVE' || s.activity === 'CYCLING') {
-      vehicleActivityHits++;
-    }
+    if (s.activity === 'AUTOMOTIVE') automotiveHits++;
+    if (s.activity === 'CYCLING') cyclingHits++;
 
     if (i > 0) {
       const prev = sorted[i - 1]!;
@@ -126,14 +171,22 @@ function analyzeSamples(samples: MovementSample[]): string[] {
     }
   }
 
+  // Hard rejects: teleport + sustained automotive from raw activity.
   if (teleported) reasons.push('teleport detected between samples');
-  if (overMaxSpeed / sorted.length > 0.2) {
-    reasons.push(`${overMaxSpeed}/${sorted.length} samples exceed walking speed`);
+  if (automotiveHits / sorted.length > 0.3) {
+    reasons.push('activity recognition reports automotive');
   }
-  if (vehicleActivityHits / sorted.length > 0.3) {
-    reasons.push('activity recognition reports vehicle/cycling');
+
+  // Soft flags: cycling (plausible slow commute, not blocking) and the
+  // classic "flat accelerometer + GPS moves" spoof signature — logged
+  // but not blocking, because iOS legitimately suspends the raw
+  // accelerometer stream for pocketed walks and would otherwise false-
+  // positive here. Graduates to a hard reject once CMPedometer is wired
+  // (see docs/13-BOOTSTRAP-IOS.md Alpha P0).
+  if (cyclingHits / sorted.length > 0.3) {
+    flags.push('UNKNOWN_ACTIVITY');
   }
-  // Very flat accelerometer with non-zero GPS displacement is a classic spoof signal.
+
   if (accelSamples > 0 && stepSampleCount > 0) {
     const avgAccelDelta = totalAccel / accelSamples;
     const avgStepDelta = stepDeltaSum / stepSampleCount;
@@ -151,10 +204,11 @@ function analyzeSamples(samples: MovementSample[]): string[] {
       );
     }, 0);
     if (gpsDisplacement > 30 && avgAccelDelta < 0.15 && avgStepDelta < 0.05) {
-      reasons.push('GPS movement without matching accelerometer activity (possible spoof)');
+      flags.push('FLAT_ACCELEROMETER_WITH_GPS');
     }
   }
-  return reasons;
+
+  return { reasons, flags };
 }
 
 export function haversineMeters(

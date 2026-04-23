@@ -21,8 +21,16 @@ import {
   lockEntityForCollect,
 } from './entities.repository.js';
 
-export async function listNearby(query: NearbyQuery): Promise<GameEntity[]> {
+// Cap on how much GPS `horizontalAccuracy` we will subtract from the measured
+// distance before checking the collection radius. Prevents an adversary from
+// claiming unbounded uncertainty to bypass the gate; 35 m aligns with
+// GPS_MAX_ACCURACY_METERS (anything worse is already soft-flagged by movement
+// validation). See docs/07-MOVEMENT-DETECTION.md ("Uncertainty-aware collect").
+const MAX_ACCURACY_TOLERANCE_M = 35;
+
+export async function listNearby(userId: string, query: NearbyQuery): Promise<GameEntity[]> {
   const rows = await findNearbyEntities(prisma, {
+    userId,
     lat: query.lat,
     lng: query.lng,
     radiusMeters: query.radiusMeters,
@@ -59,7 +67,19 @@ export async function collect(
     receivedAt: new Date(),
   });
   if (!validation.valid) {
-    throw movementInvalid('Movement validation failed', { reasons: validation.reasons });
+    throw movementInvalid('Movement validation failed', {
+      reasons: validation.reasons,
+      flags: validation.flags,
+    });
+  }
+  // Soft flags accompany a successful validation; they are persisted
+  // into collection_log.movement_data.flags for anti-cheat triage but
+  // do NOT block the collect. See docs/07-MOVEMENT-DETECTION.md.
+  if (validation.flags.length > 0) {
+    logger.info(
+      { userId, idempotencyKey, flags: validation.flags },
+      'collect accepted with soft flags',
+    );
   }
 
   const response = await prisma.$transaction(
@@ -94,9 +114,33 @@ export async function collect(
         request.location.latitude,
         request.location.longitude,
       );
-      if (distance > entity.collection_radius_meters) {
+      // Uncertainty-aware distance gate.
+      //
+      // The phone reports `horizontalAccuracy` — the radius of a disc around
+      // the reported point where the TRUE position could be. Indoors / under
+      // heavy Wi-Fi noise this is routinely 15-40 m on iPhone. If we compare
+      // raw ST_Distance against the collection radius we reject legitimate
+      // collects whenever GPS is uncertain.
+      //
+      // Instead: accept if the closest point in the uncertainty disc is
+      // inside the collection radius, capped so a spoofer can't claim
+      // arbitrarily large accuracy to bypass the check.
+      //
+      // Still hard-reject when even the most generous interpretation puts
+      // the user clearly out of range. That catches "I'm 200 m away and
+      // spammed the collect button" cases.
+      const rawAccuracy = request.location.accuracy ?? 0;
+      const tolerance = Math.min(Math.max(rawAccuracy, 0), MAX_ACCURACY_TOLERANCE_M);
+      const effectiveDistance = Math.max(0, distance - tolerance);
+      const hardLimit = entity.collection_radius_meters * 2 + tolerance;
+      if (distance > hardLimit) {
         throw outOfRange(
-          `User is ${distance.toFixed(1)}m away; max is ${entity.collection_radius_meters}m`,
+          `User is ${distance.toFixed(1)}m away (±${tolerance.toFixed(0)}m); max is ${entity.collection_radius_meters}m`,
+        );
+      }
+      if (effectiveDistance > entity.collection_radius_meters) {
+        throw outOfRange(
+          `User is ${distance.toFixed(1)}m away (±${tolerance.toFixed(0)}m); max is ${entity.collection_radius_meters}m`,
         );
       }
 
@@ -120,6 +164,7 @@ export async function collect(
           summary: request.summary,
           sampleCount: request.samples?.length ?? 0,
           validation,
+          flags: validation.flags,
         },
         pointsEarned: points,
         idempotencyKey,

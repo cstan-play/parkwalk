@@ -214,52 +214,49 @@ Authorization: Bearer {access_token}
 
 ## Game Entity Endpoints
 
-### Get Nearby Entities
+> **Phase 1 (current) vs this document.** Older subsections below use
+> illustrative JSON shapes from the original product sketch. The **live**
+> contract is implemented under `/api/v1/entities`, uses **camelCase**
+> DTOs from `@parkwalk/shared`, and matches the Zod schemas in
+> `shared/src/schemas/entity.ts` and `shared/src/schemas/collect.ts`.
+> Movement and collect rules are documented in `docs/07-MOVEMENT-DETECTION.md`.
+
+### Get Nearby Entities (implemented)
 
 ```http
-GET /entities/nearby?lat=37.7749&lng=-122.4194&radius=500&types=treasure,collectible
+GET /api/v1/entities/nearby?lat=55.676&lng=12.568&radiusMeters=500&limit=50
 Authorization: Bearer {access_token}
 ```
 
-**Query Parameters:**
-- `lat` (required): Latitude
-- `lng` (required): Longitude
-- `radius` (optional): Search radius in meters (default: 100, max: 1000)
-- `types` (optional): Comma-separated entity types (default: all)
+**Query parameters** (`nearbyQuerySchema`): `lat`, `lng` (required);
+`radiusMeters` (optional, default 500, max 5000); `type` (optional entity
+type enum); `limit` (optional, default 50, max 200).
+
+**Behavior:** Results are **scoped to the authenticated user**: entities this
+user has already collected are **omitted** so the map does not show completed
+pick-ups again.
 
 **Response 200:**
 ```json
 {
-  "entities": [
+  "items": [
     {
-      "id": "uuid",
-      "type": "treasure",
-      "location": {
-        "lat": 37.7749,
-        "lng": -122.4194
-      },
-      "distance_meters": 45.2,
-      "config": {
-        "name": "Golden Coin",
-        "description": "A rare treasure",
-        "rarity": "legendary",
-        "points": 100,
-        "image_url": "https://..."
-      },
-      "collection_radius_meters": 10,
-      "creator": {
-        "id": "uuid",
-        "username": "hider123"
-      },
-      "created_at": "2025-01-10T12:00:00Z",
-      "can_collect": true
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "collectible",
+      "creatorId": null,
+      "location": { "latitude": 55.6761, "longitude": 12.5681 },
+      "active": true,
+      "visibleFrom": "2026-01-01T00:00:00.000Z",
+      "visibleUntil": null,
+      "config": { "name": "Seed coin", "points": 10 },
+      "collectionRadiusMeters": 10,
+      "maxCollections": null,
+      "currentCollections": 0,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "distanceMeters": 42.3
     }
-  ],
-  "total": 5,
-  "user_location": {
-    "lat": 37.7749,
-    "lng": -122.4194
-  }
+  ]
 }
 ```
 
@@ -299,62 +296,33 @@ Authorization: Bearer {access_token}
 }
 ```
 
-### Collect Entity
+### Collect Entity (implemented)
 
 ```http
-POST /entities/collect
+POST /api/v1/entities/collect
 Authorization: Bearer {access_token}
+Idempotency-Key: {opaque_key}
 Content-Type: application/json
-
-{
-  "entity_id": "uuid",
-  "user_location": {
-    "lat": 37.7749,
-    "lng": -122.4194
-  },
-  "movement_data": {
-    "state": "WALKING_VALID",
-    "gps_speed_mps": 1.2,
-    "gps_accuracy_meters": 5,
-    "accelerometer_pattern": "walking",
-    "activity_recognition": "WALKING",
-    "step_count_rate": 2.1,
-    "validation_score": 0.95
-  }
-}
 ```
 
-**Response 200:**
-```json
-{
-  "collection": {
-    "id": "uuid",
-    "entity_id": "uuid",
-    "collected_at": "2025-01-15T14:30:00Z",
-    "points_earned": 100,
-    "distance_from_entity_meters": 7.5
-  },
-  "entity": {
-    "name": "Golden Coin",
-    "rarity": "legendary"
-  },
-  "user_stats": {
-    "daily_collections": 13,
-    "daily_score": 420,
-    "total_collections": 235
-  },
-  "rewards": {
-    "points": 100,
-    "achievements_unlocked": []
-  }
-}
-```
+**Body** (`collectRequestSchema`): `entityId` (UUID), `location` (`latitude`,
+`longitude`, optional `accuracy` in meters — **used for uncertainty-aware
+distance**), `summary` (`movementSummarySchema`), `samples` (array of
+`movementSampleSchema`; **required in practice** — server hard-rejects if
+empty/missing), `clientSentAt` (ISO timestamp).
 
-**Errors:**
-- `400` - Invalid movement data or already collected
-- `403` - Too far from entity or not walking
-- `404` - Entity not found or not active
-- `429` - Collection rate limit exceeded
+**Response 201:** `collectResponseSchema` — `collection` (id, entityId,
+collectedAt, distanceFromEntityMeters, movementValidated) and `rewards`
+(pointsEarned, streakDays, dailyScore, allTimeScore).
+
+**Errors (non-exhaustive):**
+- `400` `VALIDATION_ERROR` — malformed body or missing `Idempotency-Key`
+- `400` `MOVEMENT_INVALID` — failed `validateMovement` (hard reject); body
+  may include `reasons` and `flags`
+- `400` `OUT_OF_RANGE` — outside uncertainty-aware collection radius
+- `409` `ALREADY_COLLECTED` — user already has this entity
+- `409` `ENTITY_INACTIVE` / cap reached / not visible
+- `429` — rate limit
 
 ### Create Treasure
 

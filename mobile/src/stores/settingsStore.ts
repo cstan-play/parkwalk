@@ -4,6 +4,15 @@ import { create } from 'zustand';
 
 const STORAGE_KEY = 'parkwalk.settings.v1';
 
+function isLoopbackApiUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
 interface Settings {
   apiBaseUrl: string;
   savedLanUrl: string;
@@ -28,10 +37,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULTS,
   hydrate: async () => {
     try {
+      const fromConfig = (Config.API_BASE_URL ?? '').trim() || DEFAULTS.apiBaseUrl;
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<Settings>;
-      set({ ...get(), ...parsed });
+      const prev = get();
+      const merged: Settings = {
+        apiBaseUrl: parsed.apiBaseUrl ?? prev.apiBaseUrl,
+        savedLanUrl: parsed.savedLanUrl ?? prev.savedLanUrl,
+        savedNgrokUrl: parsed.savedNgrokUrl ?? prev.savedNgrokUrl,
+        savedProdUrl: parsed.savedProdUrl ?? prev.savedProdUrl,
+      };
+      // Simulator often used 127.0.0.1; that persists to AsyncStorage and then
+      // breaks on a real device (the phone is not your Mac). Prefer the LAN URL
+      // from the current build's .env when we detect loopback.
+      if (isLoopbackApiUrl(merged.apiBaseUrl) && fromConfig && !isLoopbackApiUrl(fromConfig)) {
+        merged.apiBaseUrl = fromConfig;
+        merged.savedLanUrl = fromConfig;
+        await persist(merged);
+      }
+      set({ ...prev, ...merged });
     } catch {
       // noop
     }
