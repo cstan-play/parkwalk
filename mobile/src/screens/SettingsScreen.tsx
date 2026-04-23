@@ -40,7 +40,7 @@ export function SettingsScreen(): JSX.Element {
       <Button title="Use ngrok" onPress={() => useUrl(ngrok)} />
 
       <View style={{ height: 16 }} />
-      <Text style={styles.label}>Production (Phase 2 Fly.io)</Text>
+      <Text style={styles.label}>Production (Railway)</Text>
       <TextInput style={styles.input} value={prod} onChangeText={setProd} autoCapitalize="none" />
       <Button title="Use production" onPress={() => useUrl(prod)} />
 
