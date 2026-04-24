@@ -24,15 +24,27 @@ mobile/
 ## Daily dev loop
 
 ```bash
-# 1. Start backend (separate terminal, at repo root)
-npm run infra:up
-cd backend && npm run dev
+# 1. Verify hosted API
+curl https://parkwalk-production.up.railway.app/health
 
 # 2. Start Metro
 cd mobile && npm start
 
 # 3. Build and run on iPhone from Xcode (Cmd-R)
 ```
+
+## Current architecture notes
+
+- Auth tokens live in Keychain via `src/services/secureStorage.ts`.
+- `src/services/apiClient.ts` injects the access token, silently refreshes
+  once on 401, and updates Keychain/Zustand with rotated tokens.
+- Settings sign-out revokes the refresh token through `POST /auth/logout`
+  before clearing local auth state. If the network revoke fails, local
+  credentials are still cleared.
+- Map collection uses live GPS distance plus capped horizontal accuracy,
+  matching the backend uncertainty-aware collect gate. Temporary local
+  debug transport has been removed; the visible overlay remains the field
+  diagnostic surface for the first-walk loop.
 
 ## Phase 1 deliberate limits
 

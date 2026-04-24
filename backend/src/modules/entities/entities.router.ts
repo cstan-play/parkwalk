@@ -7,6 +7,7 @@ import {
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth.js';
+import { asyncHandler } from '../../middleware/asyncHandler.js';
 import { requireIdempotencyKey } from '../../middleware/idempotency.js';
 import { createRateLimit } from '../../middleware/rateLimit.js';
 import { validate } from '../../middleware/validate.js';
@@ -32,10 +33,10 @@ export function buildEntitiesRouter(): Router {
     authenticate,
     nearbyLimit,
     validate(nearbyQuerySchema, 'query'),
-    async (req, res) => {
+    asyncHandler(async (req, res) => {
       const items = await listNearby(req.user!.id, req.query as never);
       res.json({ items });
-    },
+    }),
   );
 
   router.post(
@@ -44,10 +45,10 @@ export function buildEntitiesRouter(): Router {
     collectLimit,
     requireIdempotencyKey,
     validate(collectRequestSchema),
-    async (req, res) => {
+    asyncHandler(async (req, res) => {
       const result = await collect(req.user!.id, req.idempotencyKey!, req.body);
       res.status(201).json(result);
-    },
+    }),
   );
 
   return router;

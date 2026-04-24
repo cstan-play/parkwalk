@@ -1,5 +1,8 @@
 # Web Dashboard Setup Guide
 
+> Future-facing dashboard sketch. The Phase 1 mobile app is hosted-API only;
+> use HTTPS Railway/staging origins in client examples.
+
 ## Overview
 
 The web dashboard provides:
@@ -152,8 +155,8 @@ src/
 Create `.env`:
 
 ```env
-REACT_APP_API_BASE_URL=http://localhost:3000/api/v1
-REACT_APP_WS_BASE_URL=ws://localhost:3000
+REACT_APP_API_BASE_URL=https://parkwalk-production.up.railway.app/api/v1
+REACT_APP_WS_BASE_URL=wss://parkwalk-production.up.railway.app
 REACT_APP_MAPBOX_TOKEN=your-mapbox-token
 ```
 

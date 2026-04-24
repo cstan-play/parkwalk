@@ -1,5 +1,8 @@
 # Mobile App Setup Guide (React Native)
 
+> Historical architecture sketch. The living ParkWalk mobile setup is
+> `mobile/SETUP.md`; the current app talks to a hosted HTTPS API only.
+
 ## Prerequisites
 
 - Node.js 18+
@@ -226,8 +229,8 @@ src/
 Create `.env`:
 
 ```env
-API_BASE_URL=http://localhost:3000/api/v1
-WS_BASE_URL=ws://localhost:3000
+# Optional hosted HTTPS staging override. Leave empty to use the bundled Railway origin.
+API_BASE_URL=
 MAPBOX_ACCESS_TOKEN=your-mapbox-token
 ```
 
@@ -237,8 +240,7 @@ Create `src/config/env.ts`:
 import Config from 'react-native-config';
 
 export const env = {
-  API_BASE_URL: Config.API_BASE_URL || 'http://localhost:3000/api/v1',
-  WS_BASE_URL: Config.WS_BASE_URL || 'ws://localhost:3000',
+  API_BASE_URL: Config.API_BASE_URL || 'https://parkwalk-production.up.railway.app/api/v1',
   MAPBOX_ACCESS_TOKEN: Config.MAPBOX_ACCESS_TOKEN || '',
 };
 ```

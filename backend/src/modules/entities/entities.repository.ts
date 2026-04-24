@@ -18,6 +18,12 @@ export interface NearbyRow {
   distance_meters: number;
 }
 
+export interface EntityLocationRow {
+  id: string;
+  lat: number;
+  lng: number;
+}
+
 export async function findNearbyEntities(
   db: PrismaClient | Prisma.TransactionClient,
   params: {
@@ -91,6 +97,73 @@ export async function findNearbyEntities(
     ORDER BY distance_meters ASC
     LIMIT ${limit}
   `;
+}
+
+export async function findActiveEntityLocations(
+  db: PrismaClient | Prisma.TransactionClient,
+  params: {
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+    type?: string;
+    limit: number;
+  },
+): Promise<EntityLocationRow[]> {
+  const { lat, lng, radiusMeters, type, limit } = params;
+  if (type) {
+    return db.$queryRaw<EntityLocationRow[]>`
+      SELECT id,
+             ST_Y(location::geometry) AS lat,
+             ST_X(location::geometry) AS lng
+      FROM game_entities
+      WHERE active = true
+        AND type = ${type}
+        AND (visible_until IS NULL OR visible_until > NOW())
+        AND ST_DWithin(location, ST_MakePoint(${lng}, ${lat})::geography, ${radiusMeters})
+      ORDER BY ST_Distance(location, ST_MakePoint(${lng}, ${lat})::geography) ASC
+      LIMIT ${limit}
+    `;
+  }
+  return db.$queryRaw<EntityLocationRow[]>`
+    SELECT id,
+           ST_Y(location::geometry) AS lat,
+           ST_X(location::geometry) AS lng
+    FROM game_entities
+    WHERE active = true
+      AND (visible_until IS NULL OR visible_until > NOW())
+      AND ST_DWithin(location, ST_MakePoint(${lng}, ${lat})::geography, ${radiusMeters})
+    ORDER BY ST_Distance(location, ST_MakePoint(${lng}, ${lat})::geography) ASC
+    LIMIT ${limit}
+  `;
+}
+
+export async function insertCollectible(
+  db: PrismaClient | Prisma.TransactionClient,
+  params: {
+    lat: number;
+    lng: number;
+    config: Record<string, unknown>;
+    collectionRadiusMeters: number;
+    maxCollections?: number | null;
+  },
+): Promise<string> {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO game_entities (
+      type,
+      location,
+      config,
+      collection_radius_meters,
+      max_collections
+    ) VALUES (
+      'collectible',
+      ST_MakePoint(${params.lng}, ${params.lat})::geography,
+      ${JSON.stringify(params.config)}::jsonb,
+      ${params.collectionRadiusMeters},
+      ${params.maxCollections ?? null}
+    )
+    RETURNING id
+  `;
+  return rows[0]!.id;
 }
 
 export interface EntityLockRow {

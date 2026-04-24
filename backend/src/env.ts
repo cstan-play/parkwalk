@@ -21,7 +21,7 @@ const envSchema = z.object({
 
   ALLOWED_ORIGINS: z
     .string()
-    .default('http://localhost:3000,http://localhost:5173')
+    .default('https://parkwalk-production.up.railway.app,http://localhost:5173')
     .transform((s) => s.split(',').map((v) => v.trim()).filter(Boolean)),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -31,6 +31,12 @@ const envSchema = z.object({
   SEED_ENTITY_COUNT: z.coerce.number().int().min(1).max(500).default(15),
   SEED_SCATTER_METERS: z.coerce.number().int().min(15).max(5000).default(500),
   SEED_MIN_SPACING_METERS: z.coerce.number().int().min(5).max(500).default(12),
+
+  NEARBY_AUTO_SEED_ENABLED: z.coerce.boolean().default(false),
+  NEARBY_AUTO_SEED_TARGET_COUNT: z.coerce.number().int().min(0).max(100).default(12),
+  NEARBY_AUTO_SEED_RADIUS_METERS: z.coerce.number().int().min(25).max(1000).default(140),
+  NEARBY_AUTO_SEED_MIN_DISTANCE_METERS: z.coerce.number().int().min(5).max(500).default(25),
+  NEARBY_AUTO_SEED_MIN_SPACING_METERS: z.coerce.number().int().min(5).max(500).default(18),
 });
 
 export type Env = z.infer<typeof envSchema>;

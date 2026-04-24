@@ -27,12 +27,12 @@ A cross-platform location-based social walking game where users collect items, h
 - **Collectibles System**: fixed spawn points with Poisson-disc seeding
   (no overlapping collection radii), user-placed treasures.
 - **Custom Map**: Mapbox Streets today, custom style imminent.
-- **Auth**: JWT access + refresh tokens, keychain-backed login today; **silent
-  refresh on 401** and **explicit logout/revoke** are Alpha-scope polish (see
-  `docs/13-BOOTSTRAP-IOS.md` follow-ups).
+- **Auth**: JWT access + refresh tokens, keychain-backed login, silent
+  refresh on 401, and explicit sign-out that revokes the refresh session
+  server-side before clearing Keychain/Zustand state.
 
 ### Phase 1 — Alpha product features (scheduled, not "deferred")
-- **Offline map tiles** — Mapbox OfflineManager so a dropped LAN/cellular
+- **Offline map tiles** — Mapbox OfflineManager so a dropped cellular
   signal doesn't blank the map mid-walk.
 - **Walkable-way snapping** — seed script snaps random candidates to the
   nearest OSM footway/sidewalk/path so markers land on terrain a player can

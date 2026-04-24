@@ -207,7 +207,7 @@ railway run npm run prisma:seed -w backend
 
    **No trailing slash.**
 
-2. In the app: **Settings** → **Use LAN** / edit field — paste the **HTTPS** Railway URL, or rebuild with updated `.env`.
+2. In the app: **Settings** → edit **Hosted API URL** and tap **Use hosted API**, or rebuild with `API_BASE_URL=https://YOUR-RAILWAY-URL` in `mobile/.env`.
 3. Build/run from **Xcode**. Test **Register** and **Map** on **cellular** if you can.
 
 ---

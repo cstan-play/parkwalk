@@ -2,11 +2,11 @@
 
 The goal of this walk is to prove end-to-end that:
 
-1. Your iPhone (free-sideload) can hit your local backend.
+1. Your iPhone (free-sideload) can hit the hosted Railway backend over HTTPS.
 2. GPS streams in.
-3. The client classifies movement as `WALKING_VALID` when you're actually
-   walking.
-4. The server accepts the collect and rejects anything suspicious.
+3. The client records recent walking samples while you approach a collectible.
+4. The server accepts a collect after plausible recent walking and rejects
+   impossible movement, vehicle movement, or out-of-range taps.
 5. Stats increment.
 
 If any of these fail, stop and fix before moving on. Phase 2 will be faster
@@ -14,59 +14,39 @@ if Phase 1 correctness is real.
 
 ## Step 0 — Preconditions
 
-- [ ] Mac on the same Wi-Fi as the iPhone.
-- [ ] `mobile/.env` has `API_BASE_URL=http://<mac-lan-ip>:3000` and a valid
-      `pk.*` Mapbox token.
-- [ ] `backend/.env` is filled; `JWT_SECRET` is at least 32 characters.
+- [ ] Railway backend is deployed and public.
+- [ ] `https://<railway-url>/health` returns `{"status":"ok",...}`.
+- [ ] `https://<railway-url>/ready` returns `{"status":"ready",...}`.
+- [ ] `mobile/.env` has a valid `pk.*` Mapbox token. Leave `API_BASE_URL`
+      empty for the default production Railway API, or set it to another
+      hosted HTTPS Railway/staging URL.
 - [ ] Xcode project is signed with your Personal Team, Background Modes
       capability has **Location updates** checked.
 
-## Step 1 — Bring up services
+## Step 1 — Verify hosted services
+
+From any browser or terminal:
 
 ```bash
-# Terminal 1 (repo root)
-npm run infra:up
-
-# Terminal 2 (backend)
-cd backend
-npx prisma migrate deploy
-npm run prisma:seed
-npm run dev
-```
-
-You should see:
-
-```
-ParkWalk backend ready. Bind 0.0.0.0 so your iPhone on LAN can reach it.
-```
-
-## Step 2 — Verify reachability
-
-From your Mac:
-
-```bash
-curl http://127.0.0.1:3000/health
+curl https://<railway-url>/health
 # {"status":"ok","uptimeSeconds":...}
-curl http://127.0.0.1:3000/ready
+curl https://<railway-url>/ready
 # {"status":"ready","db":"ok","redis":"ok"}
 ```
 
 From your iPhone, open Safari and visit:
 
 ```
-http://<mac-lan-ip>:3000/health
+https://<railway-url>/health
 ```
 
-You should see the same JSON. If you don't:
+You should see the same JSON. If not, fix Railway deploy/networking before
+testing the app.
 
-- Allow Node through macOS Firewall (System Settings → Network → Firewall).
-- Confirm the iPhone is on the same Wi-Fi (VPNs off).
-- Try `ngrok http 3000` and swap the URL in Settings.
-
-## Step 3 — Build and install on iPhone
+## Step 2 — Build and install on iPhone
 
 ```bash
-# Terminal 3 (Metro)
+# Terminal 1 (Metro)
 cd mobile && npm start
 
 # Xcode: Product → Run
@@ -79,26 +59,36 @@ First launch prompts:
   background GPS during walks).
 - "Allow ParkWalk to access motion and fitness" → Allow.
 
-## Step 4 — Register an account
+## Step 3 — Register an account
 
 In the app: Onboarding → Create account.
 - Username: any (e.g. `walktester`).
 - Email: any real format (not verified in Phase 1).
 - Password: 8+ chars.
 
-Check the backend log — you should see a registration request.
+Check Railway logs — you should see a registration request.
 
-## Step 5 — Seed entities near where you will walk
+## Step 4 — Seed entities near where you will walk
 
-The seed script drops ~15 collectibles in a 200m radius around
-`SEED_CENTER_LAT / SEED_CENTER_LNG` in `backend/.env`. Edit those to a park
-or street near you, then re-run:
+Recommended for ad-hoc testing: enable nearby auto-seeding on Railway:
 
-```bash
-cd backend && npm run prisma:seed
+```env
+NEARBY_AUTO_SEED_ENABLED=true
+NEARBY_AUTO_SEED_TARGET_COUNT=12
+NEARBY_AUTO_SEED_RADIUS_METERS=140
+NEARBY_AUTO_SEED_MIN_DISTANCE_METERS=25
+NEARBY_AUTO_SEED_MIN_SPACING_METERS=18
 ```
 
-## Step 6 — The actual walk
+Restart/redeploy the Railway service after changing variables. The next
+authenticated `/api/v1/entities/nearby` call will top up a small shared
+cluster around the phone's reported location.
+
+Alternative: use `docs/14-DEPLOY-RAILWAY.md` Step 10 to run
+`prisma:seed` as a Railway one-off command after setting
+`SEED_CENTER_LAT / SEED_CENTER_LNG`.
+
+## Step 5 — The actual walk
 
 - Put on shoes.
 - Leave the app in the foreground and start walking outside when you can
@@ -115,27 +105,31 @@ cd backend && npm run prisma:seed
   on the next nearby refetch (up to ~30 s) because the API excludes entities
   you already collected.
 
-## Step 7 — Verify on the server
+## Step 6 — Verify on the server
 
-```bash
-# From your Mac
-psql 'postgresql://parkwalk:parkwalk_dev@localhost:5432/parkwalk' \
-  -c "SELECT u.username, s.all_time_score, s.total_collections FROM users u JOIN user_stats s ON s.user_id = u.id;"
-```
+Use Railway's database query tool, Railway CLI, or Prisma Studio connected to
+the Railway `DATABASE_URL`.
 
 You should see your user with `all_time_score >= 10` and
 `total_collections >= 1`.
 
-```bash
-# Check the collection row
-psql 'postgresql://parkwalk:parkwalk_dev@localhost:5432/parkwalk' \
-  -c "SELECT id, movement_validated, movement_state, points_earned, distance_from_entity_meters FROM user_collections ORDER BY collected_at DESC LIMIT 5;"
+Useful checks:
+
+```sql
+SELECT u.username, s.all_time_score, s.total_collections
+FROM users u
+JOIN user_stats s ON s.user_id = u.id;
+
+SELECT id, movement_validated, movement_state, points_earned, distance_from_entity_meters
+FROM user_collections
+ORDER BY collected_at DESC
+LIMIT 5;
 ```
 
 `movement_validated` must be `t` (true) and `movement_state` must be
 `WALKING_VALID`.
 
-## Step 8 — Adversarial tests (this is the proof of the USP)
+## Step 7 — Adversarial tests (this is the proof of the USP)
 
 ### Stationary / low-motion collect
 
@@ -164,7 +158,7 @@ psql 'postgresql://parkwalk:parkwalk_dev@localhost:5432/parkwalk' \
 - Try to collect.
 - Expected: backend rejects with teleport / spoof reason.
 
-## Step 9 — Record fixtures from a real walk
+## Step 8 — Record fixtures from a real walk
 
 After a successful walk, pull the `movement_data` JSONB of a collection row
 and save it as `backend/test/fixtures/real-walking-<date>.json`. Future
@@ -172,15 +166,10 @@ regressions can compare against real data, not synthetic.
 
 ## If something fails
 
-- **Registration / login: "Network error" or timeout**: On a **physical
-  iPhone**, `http://127.0.0.1:3000` or `localhost` points at the **phone**,
-  not your Mac. Open **API / server URL** from onboarding, sign-in, or
-  register (or **Settings** after you’re in), set **LAN** to
-  `http://<mac-lan-ip>:3000`, tap **Use LAN**, then try again. If you
-  previously used the simulator, uninstall the app or clear storage so old
-  loopback URLs are not stuck — the app now auto-replaces persisted loopback
-  with `mobile/.env`’s `API_BASE_URL` when you rebuild. Also confirm
-  `http://<same-ip>:3000/health` works in **Safari on the phone**.
+- **Registration / login: "Network error" or timeout**: confirm the Settings
+  screen shows an `https://` Railway URL, then open `/health` from iPhone
+  Safari. If Railway is reachable in Safari but not the app, rebuild after
+  editing `mobile/.env`.
 - **Map loads but state stays UNKNOWN**: GPS has no samples. Walk outdoors
   with open sky. If still stuck, check that location permission is
   `Always` and motion is `Allowed`.
@@ -201,5 +190,4 @@ regressions can compare against real data, not synthetic.
 
 - You want a friend to test → enroll Apple Developer Program, TestFlight.
 - You're tired of re-signing every 7 days → enroll Apple Developer Program.
-- You want your Mac to sleep without killing the backend → Fly.io.
 - You want realtime / social features → Socket.IO + web dashboard.

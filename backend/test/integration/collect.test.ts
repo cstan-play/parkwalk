@@ -154,14 +154,14 @@ describe('POST /api/v1/entities/collect', () => {
     const first = await request(app)
       .post('/api/v1/entities/collect')
       .set('Authorization', `Bearer ${tokens.accessToken}`)
-      .set('Idempotency-Key', 'k1')
+      .set('Idempotency-Key', 'collect-k1')
       .send(base);
     expect(first.status).toBe(201);
 
     const second = await request(app)
       .post('/api/v1/entities/collect')
       .set('Authorization', `Bearer ${tokens.accessToken}`)
-      .set('Idempotency-Key', 'k2')
+      .set('Idempotency-Key', 'collect-k2')
       .send(base);
     expect(second.status).toBe(409);
     expect(second.body.error.code).toBe('ALREADY_COLLECTED');

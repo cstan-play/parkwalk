@@ -15,7 +15,7 @@ async function start(): Promise<void> {
         env: env.NODE_ENV,
         api: `/api/${env.API_VERSION}`,
       },
-      'ParkWalk backend ready. Bind 0.0.0.0 so your iPhone on LAN can reach it.',
+      'ParkWalk backend ready.',
     );
   });
 

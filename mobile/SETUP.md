@@ -50,9 +50,8 @@ cp ios-setup/Podfile ios/Podfile
 ```
 
 Edit `ios/ParkWalk/Info.plist`:
-- Find the `NSExceptionDomains` block and replace `192.168.1.10` with your
-  Mac's actual LAN IP (`ipconfig getifaddr en0`). Or delete the whole
-  `NSAppTransportSecurity` block and use `ngrok` (HTTPS) instead.
+- No API-specific App Transport Security exception is needed. The app talks
+  to the hosted Railway API over HTTPS.
 
 Edit `ios-setup/Podfile` if your project root is somewhere unusual, then copy
 again. The default assumes `mobile/ios/Podfile` with `mobile/node_modules/`.
@@ -89,12 +88,13 @@ most common cause is a missing or misconfigured `~/.netrc`.
 # In mobile/
 cp .env.example .env
 # Edit:
-#   API_BASE_URL=http://<your-mac-lan-ip>:3000
+#   API_BASE_URL=              # optional hosted HTTPS staging override
 #   MAPBOX_ACCESS_TOKEN=pk.your-public-runtime-token
 ```
 
 `react-native-config` reads this file at build time. Changing it requires a
-rebuild (not just Metro reload).
+rebuild (not just Metro reload). `API_BASE_URL` must be empty or an HTTPS URL;
+local HTTP backends are not a supported mobile runtime path.
 
 ## 6. Configure Xcode signing
 
@@ -124,11 +124,7 @@ If signing fails with "No profiles for com.<yourname>.parkwalk":
 ## 7. Run on device
 
 ```bash
-# In one terminal, at repo root:
-npm run infra:up
-cd backend && npm run prisma:migrate && npm run prisma:seed && npm run dev
-
-# In another terminal:
+# In one terminal:
 cd mobile && npm start
 
 # In Xcode, hit Cmd-R with your iPhone plugged in.
@@ -159,10 +155,9 @@ changes needed.
 - **App opens but no map tiles**: check `MAPBOX_ACCESS_TOKEN` in
   `mobile/.env`; it must be a `pk.*` public token. Rebuild after editing
   `.env` (Metro reload is not enough).
-- **App can't reach backend**: the iPhone must be on the same Wi-Fi as the
-  Mac. From the phone's Safari, `curl http://<mac-lan-ip>:3000/health`
-  should return JSON. If it doesn't, Mac firewall is probably blocking port
-  3000 — System Settings → Network → Firewall → allow Node.
+- **App can't reach backend**: Settings must show an `https://` Railway API
+  URL. Open `https://<railway-url>/health` in iPhone Safari. If Safari works
+  but the app does not, rebuild after editing `mobile/.env`.
 - **Constant "Background Location Indicator"**: expected behavior when
   `UIBackgroundModes: location` is enabled and the app is using GPS.
 

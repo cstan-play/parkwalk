@@ -9,7 +9,7 @@ ParkWalk/
   shared/     @parkwalk/shared   Zod schemas, TS types, domain constants
   backend/    @parkwalk/backend  Express + Prisma + PostGIS API
   mobile/     @parkwalk/mobile   React Native iOS app
-  infra/                         Docker compose for local Postgres+PostGIS+Redis
+  infra/                         Docker compose for backend integration tests
   docs/                          Product + architecture docs
 ```
 
@@ -21,7 +21,9 @@ ParkWalk/
 - **Mapbox** account with two tokens:
   - `pk.*` — public token for runtime map rendering.
   - `sk.*` with `DOWNLOADS:READ` scope — used by CocoaPods to fetch the native iOS Mapbox SDK. Stored in `~/.netrc`, not committed.
-- **Node 20**, **npm 10**, **Docker Desktop**.
+- **Node 20**, **npm 10**.
+- Hosted Railway backend URL, e.g. `https://parkwalk-production.up.railway.app`.
+- **Docker Desktop** only if you run backend integration tests locally.
 
 ## First-time setup
 
@@ -29,26 +31,12 @@ ParkWalk/
 # 1. Install dependencies
 npm install
 
-# 2. Start Postgres (with PostGIS) + Redis locally
-npm run infra:up
+# 2. Deploy or verify the Railway backend
+# See docs/14-DEPLOY-RAILWAY.md. Confirm:
+#   https://<railway-url>/health
+#   https://<railway-url>/ready
 
-# 3. Copy and fill backend env
-cp backend/.env.example backend/.env
-# edit backend/.env — set JWT_SECRET to anything random for dev
-
-# 4. Run Prisma migrations and seed
-cd backend
-npm run prisma:migrate
-npm run prisma:seed
-cd ..
-
-# 5. Start the backend
-cd backend && npm run dev
-# API is now on http://0.0.0.0:3000
-# Find your Mac's LAN IP for the phone to reach it:
-#   ipconfig getifaddr en0
-
-# 6. Set up Mapbox secret token for mobile pod install
+# 3. Set up Mapbox secret token for mobile pod install
 # Append to ~/.netrc (chmod 600):
 #   machine api.mapbox.com
 #     login mapbox
@@ -57,11 +45,12 @@ cd backend && npm run dev
 # Then:
 cd mobile
 cp .env.example .env
-# edit mobile/.env — set API_BASE_URL=http://<mac-lan-ip>:3000 and MAPBOX_ACCESS_TOKEN=pk.your-public-token
+# edit mobile/.env — set MAPBOX_ACCESS_TOKEN=pk.your-public-token
+# optional: set API_BASE_URL=https://<railway-staging-url> for hosted staging
 npm install
 cd ios && pod install && cd ..
 
-# 7. Open in Xcode, set signing, Run on device
+# 4. Open in Xcode, set signing, Run on device
 open ios/ParkWalk.xcworkspace
 #  - Signing & Capabilities:
 #      Team: Personal Team (<your name>)
@@ -70,23 +59,24 @@ open ios/ParkWalk.xcworkspace
 #  - Connect iPhone via cable
 #  - Product → Run
 
-# 8. Trust the dev cert on your iPhone
+# 5. Trust the dev cert on your iPhone
 #    Settings → General → VPN & Device Management → trust your Apple ID
 ```
 
 ## Daily dev loop
 
-- Backend: `cd backend && npm run dev`
+- Backend: Railway hosted API.
 - Run on phone: `Cmd-R` in Xcode with phone plugged in.
 - Every ~7 days: re-run from Xcode to refresh the free-provisioning cert.
+- Backend tests only: `npm run infra:up`, then backend migrations/tests.
 
 ## Testing the full walk
 
 See `docs/12-FIRST-WALK.md` for the full checklist.
 
 Quick version:
-1. `npm run infra:up` then `cd backend && npm run dev`.
-2. Check `curl http://<mac-lan-ip>:3000/health` from both Mac and iPhone Safari.
+1. Check `https://<railway-url>/health` and `/ready`.
+2. In the app Settings, confirm the API URL is the hosted HTTPS API.
 3. Build & Run on iPhone from Xcode.
 4. Register, walk until the overlay often shows `WALKING_VALID`, tap a nearby
    marker to collect (see `docs/07-MOVEMENT-DETECTION.md` for movement +
@@ -98,14 +88,14 @@ Quick version:
 - Backend with auth, nearby entities, collect-with-idempotency, stats.
 - PostGIS spatial queries.
 - Committed movement fixtures (walking / driving / teleport-spoof) with passing tests.
-- Local docker Postgres+PostGIS+Redis.
+- Local docker Postgres+PostGIS+Redis for backend integration tests.
 
 ## Phase 1 scope (what this repo explicitly defers to Phase 2)
 
 - Web dashboard.
 - Realtime WebSocket (leaderboard, activity feed) — pull-based in Phase 1.
 - Push notifications (requires paid Apple Developer).
-- TestFlight / external testers / cloud hosting.
+- TestFlight / external testers.
 - Challenge and MeetingPoint entity types.
 - Android build.
 

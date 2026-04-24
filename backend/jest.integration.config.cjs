@@ -15,7 +15,8 @@ module.exports = {
       { tsconfig: '<rootDir>/tsconfig.json', useESM: false, diagnostics: { warnOnly: true } },
     ],
   },
-  setupFilesAfterEach: ['<rootDir>/test/integration/setup.ts'],
+  setupFiles: ['<rootDir>/test/integration/env.ts'],
+  setupFilesAfterEnv: ['<rootDir>/test/integration/setup.ts'],
   testTimeout: 30000,
   maxWorkers: 1,
 };

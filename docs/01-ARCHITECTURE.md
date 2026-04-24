@@ -248,9 +248,22 @@ Express App
 ├── Rate Limiter
 ├── JWT Authentication
 ├── Request Logger
-├── Route Handlers
+├── Route Handlers (`asyncHandler` for promise rejection forwarding)
 └── Error Handler
 ```
+
+**Async route convention:** Express 4 does not automatically forward rejected
+promises from async route handlers into error middleware. Backend routes that
+`await` service calls should wrap handlers with
+`backend/src/middleware/asyncHandler.ts`; otherwise expected domain errors
+like `MOVEMENT_INVALID`, `OUT_OF_RANGE`, or `ALREADY_COLLECTED` can hang the
+request instead of returning the JSON error shape.
+
+**Session lifecycle:** Mobile stores access/refresh tokens in iOS Keychain.
+The API client retries a single 401 by calling `/api/v1/auth/refresh`,
+rotating the refresh session and updating stored tokens. Explicit sign-out
+calls `/api/v1/auth/logout` with the current refresh token, then clears
+Keychain and Zustand state locally even if the network revoke fails.
 
 ## Data Flow Examples
 

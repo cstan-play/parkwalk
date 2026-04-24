@@ -26,7 +26,7 @@ interface RetriableRequest extends InternalAxiosRequestConfig {
 
 /**
  * Per-attempt HTTP timeout. Previously 15s, which masked flaky connections
- * behind a single long wait. 8s is still generous for a local/LAN call
+ * behind a single long wait. 8s is still generous for a hosted API call
  * (typical collect round-trip is 200-600ms) and leaves headroom for the
  * retry schedule below (total worst-case: 8s + ~400ms + 8s = ~16s, same
  * ballpark as the old single-attempt timeout but with three chances).
@@ -103,8 +103,8 @@ export const api = buildApiClient();
 
 /**
  * Exponential backoff schedule (ms), with ±20% jitter, for idempotent
- * mutation retries. Tuned for LAN / flaky wifi where the server is close
- * but the radio drops a packet.
+ * mutation retries. Tuned for flaky mobile connectivity where the radio
+ * drops a packet.
  *
  *   attempt 1  → 0 ms
  *   attempt 2  → 400 ms   ±20%

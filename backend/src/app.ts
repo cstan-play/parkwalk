@@ -28,9 +28,6 @@ export function buildApp(): Express {
         if (!origin) return cb(null, true);
         if (env.ALLOWED_ORIGINS.includes('*')) return cb(null, true);
         if (env.ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-        if (env.NODE_ENV === 'development' && /^http:\/\/(192\.168|10\.|127\.0\.0\.1|localhost)/.test(origin)) {
-          return cb(null, true);
-        }
         cb(new Error(`Origin ${origin} not allowed by CORS`));
       },
       credentials: true,

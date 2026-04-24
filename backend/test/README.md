@@ -30,6 +30,13 @@ npx prisma migrate deploy
 npm run test:integration
 ```
 
+The Jest integration config supplies local defaults that match
+`backend/.env.test.example`, so you do not need to export env vars for the
+standard Docker setup. Integration tests enable nearby auto-seeding with a
+small target count so `/entities/nearby` placement behavior is covered.
+Override `DATABASE_URL`, `REDIS_URL`, or `JWT_SECRET` only when pointing the
+suite at a different test database.
+
 The integration suite boots the full Express app via `buildApp()` and hits
 it with `supertest`. It covers:
 
@@ -39,3 +46,5 @@ it with `supertest`. It covers:
 - collect rejects out-of-range with `OUT_OF_RANGE`
 - collect with the same Idempotency-Key replays the stored result
 - collecting the same entity twice with a new key returns `ALREADY_COLLECTED`
+- nearby auto-seeding tops up a small shared cluster around the requested
+  location and does not keep inserting once the target count is visible

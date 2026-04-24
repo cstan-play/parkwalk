@@ -1,28 +1,52 @@
 import React, { useState } from 'react';
 import { Alert, Button, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { logout as revokeSession } from '@/services/authApi';
 import { useAuthStore } from '@/stores/authStore';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { normalizeApiBaseUrl, useSettingsStore } from '@/stores/settingsStore';
+import { describeApiError } from '@/util/describeApiError';
 
 export function SettingsScreen(): JSX.Element {
   const settings = useSettingsStore();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const logout = useAuthStore((s) => s.logout);
-  const [lan, setLan] = useState(settings.savedLanUrl);
-  const [ngrok, setNgrok] = useState(settings.savedNgrokUrl);
-  const [prod, setProd] = useState(settings.savedProdUrl);
+  const tokens = useAuthStore((s) => s.tokens);
+  const clearSession = useAuthStore((s) => s.logout);
+  const [apiUrl, setApiUrl] = useState(settings.savedApiUrl);
+  const [signingOut, setSigningOut] = useState(false);
 
   async function save(): Promise<void> {
-    await settings.setSavedUrl('savedLanUrl', lan);
-    await settings.setSavedUrl('savedNgrokUrl', ngrok);
-    await settings.setSavedUrl('savedProdUrl', prod);
-    Alert.alert('Saved', 'URLs stored locally.');
+    try {
+      await settings.setSavedApiUrl(apiUrl);
+      Alert.alert('Saved', 'Hosted API URL stored locally.');
+    } catch (err) {
+      Alert.alert('Invalid URL', err instanceof Error ? err.message : 'Use a valid HTTPS URL.');
+    }
   }
 
   async function useUrl(url: string): Promise<void> {
-    if (!url) return;
-    await settings.setApiBaseUrl(url);
-    Alert.alert('API base set', url);
+    try {
+      const normalized = normalizeApiBaseUrl(url);
+      await settings.setApiBaseUrl(normalized);
+      await settings.setSavedApiUrl(normalized);
+      setApiUrl(normalized);
+      Alert.alert('API base set', normalized);
+    } catch (err) {
+      Alert.alert('Invalid URL', err instanceof Error ? err.message : 'Use a valid HTTPS URL.');
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    setSigningOut(true);
+    try {
+      if (tokens?.refreshToken) {
+        await revokeSession(tokens.refreshToken);
+      }
+    } catch (err) {
+      Alert.alert('Signed out locally', `Could not revoke the server session: ${describeApiError(err)}`);
+    } finally {
+      await clearSession();
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -30,26 +54,27 @@ export function SettingsScreen(): JSX.Element {
       <Text style={styles.header}>API base URL</Text>
       <Text style={styles.current}>Current: {settings.apiBaseUrl}</Text>
 
-      <Text style={styles.label}>LAN (your Mac)</Text>
-      <TextInput style={styles.input} value={lan} onChangeText={setLan} autoCapitalize="none" />
-      <Button title="Use LAN" onPress={() => useUrl(lan)} />
-
-      <View style={{ height: 16 }} />
-      <Text style={styles.label}>ngrok (tunneled)</Text>
-      <TextInput style={styles.input} value={ngrok} onChangeText={setNgrok} autoCapitalize="none" />
-      <Button title="Use ngrok" onPress={() => useUrl(ngrok)} />
-
-      <View style={{ height: 16 }} />
-      <Text style={styles.label}>Production (Railway)</Text>
-      <TextInput style={styles.input} value={prod} onChangeText={setProd} autoCapitalize="none" />
-      <Button title="Use production" onPress={() => useUrl(prod)} />
+      <Text style={styles.label}>Hosted API URL</Text>
+      <TextInput
+        style={styles.input}
+        value={apiUrl}
+        onChangeText={setApiUrl}
+        autoCapitalize="none"
+        keyboardType="url"
+      />
+      <Button title="Use hosted API" onPress={() => useUrl(apiUrl)} />
 
       <View style={{ height: 24 }} />
-      <Button title="Save URLs" onPress={save} />
+      <Button title="Save URL" onPress={save} />
 
       <View style={{ height: 32 }} />
       {isAuthenticated ? (
-        <Button title="Sign out" color="#c00" onPress={() => logout()} />
+        <Button
+          title={signingOut ? 'Signing out...' : 'Sign out'}
+          color="#c00"
+          onPress={signOut}
+          disabled={signingOut}
+        />
       ) : null}
     </View>
   );

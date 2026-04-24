@@ -20,6 +20,7 @@ import {
   insertUserCollection,
   lockEntityForCollect,
 } from './entities.repository.js';
+import { ensureNearbyCollectibles } from './placement.service.js';
 
 // Cap on how much GPS `horizontalAccuracy` we will subtract from the measured
 // distance before checking the collection radius. Prevents an adversary from
@@ -29,7 +30,7 @@ import {
 const MAX_ACCURACY_TOLERANCE_M = 35;
 
 export async function listNearby(userId: string, query: NearbyQuery): Promise<GameEntity[]> {
-  const rows = await findNearbyEntities(prisma, {
+  let rows = await findNearbyEntities(prisma, {
     userId,
     lat: query.lat,
     lng: query.lng,
@@ -37,6 +38,24 @@ export async function listNearby(userId: string, query: NearbyQuery): Promise<Ga
     type: query.type,
     limit: query.limit,
   });
+
+  const inserted = await ensureNearbyCollectibles({
+    visibleCount: rows.length,
+    lat: query.lat,
+    lng: query.lng,
+    queryRadiusMeters: query.radiusMeters,
+    type: query.type,
+  });
+  if (inserted > 0 && rows.length < query.limit) {
+    rows = await findNearbyEntities(prisma, {
+      userId,
+      lat: query.lat,
+      lng: query.lng,
+      radiusMeters: query.radiusMeters,
+      type: query.type,
+      limit: query.limit,
+    });
+  }
 
   return rows.map((r) => ({
     id: r.id,

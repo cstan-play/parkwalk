@@ -71,15 +71,14 @@ reconstructed by reading the log on this branch.
 - Mapbox iOS SDK is bundled and signed (not yet exercised — MapScreen is
   unreachable without auth).
 - Background modes: `location`, `fetch` declared.
-- `mobile/.env` wired (`API_BASE_URL=http://<mac-lan-ip>:3000`,
-  `MAPBOX_ACCESS_TOKEN=pk.*`).
+- `mobile/.env` wired (`MAPBOX_ACCESS_TOKEN=pk.*`; `API_BASE_URL` is empty
+  for the default Railway API or an HTTPS hosted staging override).
 - `~/.netrc` holds the Mapbox `sk.*` with `DOWNLOADS:READ` scope for
   CocoaPods.
 
 ## What's blocked by this sprint's scope
 
-- **End-to-end login**: the app points at `http://<mac-lan-ip>:3000` which
-  becomes available in the `bootstrap/backend` sprint.
+- **End-to-end login**: now uses the hosted Railway API over HTTPS.
 - **Map rendering + collect loop**: gated by login (next sprint).
 - **Free provisioning** expires every 7 days. To reprovision: plug in
   iPhone, Xcode → Run. (Not a bug; Apple's free-tier contract.)
@@ -241,38 +240,33 @@ Phase 1 and tracked here so we don't lose them:
    nearest OSM footway/sidewalk/path via Overpass or a local extract
    before insert. Tracked in `docs/08-GAME-ENTITIES.md`.
 2. **Offline map tiles**. MapScreen uses Mapbox Streets with no
-   `OfflineManager` — a dropped LAN/cellular signal blanks the map
+   `OfflineManager` — a dropped cellular signal blanks the map
    mid-walk. Alpha upgrade: pre-download a ~500m tile pack around the
    user on first launch.
-3. **Auth session refresh**. Current store writes tokens to Keychain but
-   doesn't auto-refresh on 401. Alpha upgrade: silent-refresh
-   interceptor in the API client; hard-logout only when refresh fails.
-4. **Explicit logout wiring**. Profile screen has the UI but no
-   backend-revoke call. Alpha upgrade: `POST /auth/logout` + clear
-   Keychain + reset Zustand store.
-5. **Parameterized LAN IP**. `Info.plist` ATS exception + `mobile/.env`
-   currently hard-code a single IP. Alpha upgrade: read from build-time
-   config, default to ngrok HTTPS so no ATS exception is needed at all.
+3. **Auth session refresh — done for Phase 1.** The API client now retries
+   a single 401 via `/api/v1/auth/refresh`, rotates stored Keychain tokens,
+   and clears local auth state if refresh fails.
+4. **Explicit logout wiring — done for Phase 1.** Settings sign-out calls
+   `POST /auth/logout` with the refresh token, then clears Keychain and
+   resets Zustand even if the revoke request fails.
+5. **Hosted API only — done for Phase 1.** The mobile app no longer supports
+   LAN/ngrok/local HTTP API targets. `API_BASE_URL` is optional and must be a
+   hosted HTTPS API URL; otherwise the compiled Railway origin is used.
 6. **iOS 14 deployment target**. Set to match rnmapbox-maps. Revisit
    when we widen device support (unlikely before public beta).
 7. **Native CMPedometer wrapper** — **promoted to Alpha P0 milestone
    above**. Left as a line item here so the numbering in older commit
    messages still resolves.
-8. **Mac-side firewall / IP drift**. Every time the Mac's DHCP lease
-   renews, the LAN IP shifts and `Info.plist` + `mobile/.env` +
-   `backend/.env` all need updating. Short-term: the `Info.plist`
-   uses an ATS dict keyed by IP, so we update three files in lockstep.
-   Alpha fix: use mDNS (`mac-hostname.local`) or ngrok tunnel.
+8. **Mac-side firewall / IP drift — obsolete.** Railway HTTPS is now the only
+   supported mobile API path, so DHCP, ATS IP exceptions, and Mac firewall
+   issues are no longer part of the first-walk loop.
 
 ## Next session
 
-1. `docker compose up -d` in `infra/` — Postgres+PostGIS + Redis.
-2. Apply Prisma migrations; seed a tight disc of test entities
-   (`SEED_SCATTER_METERS=80` for Wi-Fi-tethered walk tests).
-3. `cd backend && npm run dev`.
-4. Verify from the iPhone's Safari: `http://<mac-lan-ip>:3000/health`
-   returns JSON.
-5. Reload the app on the phone → register → Map screen → walk outside
+1. Verify Railway `/health` and `/ready`.
+2. Enable `NEARBY_AUTO_SEED_ENABLED=true` on Railway or run the seed script as
+   a Railway one-off command near the test route.
+3. Reload the app on the phone → register → Map screen → walk outside
    → confirm movement state flips to `WALKING_VALID` → tap marker → collect.
 
 Reference: `docs/04-SETUP-BACKEND.md`, `docs/02-DATABASE-SCHEMA.md`,

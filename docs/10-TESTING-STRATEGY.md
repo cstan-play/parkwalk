@@ -23,6 +23,34 @@ Comprehensive testing strategy for the walking game MVP. Focus is on **movement 
 
 ## Backend Testing
 
+### Current Commands
+
+The living test setup in this repo is:
+
+```bash
+npm --workspace=shared run typecheck
+npm --workspace=backend run typecheck
+npm --workspace=mobile run typecheck
+npm --workspace=backend test
+npm --workspace=mobile test -- --runInBand
+```
+
+Backend integration tests require local Postgres/PostGIS and Redis. The Jest
+config supplies local defaults from `backend/test/integration/env.ts`, matching
+`backend/.env.test.example`.
+
+```bash
+npm run infra:up
+cd backend
+npx prisma migrate deploy
+npm run test:integration
+```
+
+Integration tests boot the real Express app with `supertest`. Async backend
+routes are expected to use `asyncHandler` so rejected service promises reach
+the shared JSON error middleware; this is covered indirectly by collect
+rejection tests for movement, distance, and duplicate collection errors.
+
 ### Unit Tests
 
 #### Movement Detection Algorithm
@@ -593,7 +621,7 @@ export const options = {
   },
 };
 
-const BASE_URL = 'http://localhost:3000/api/v1';
+const BASE_URL = 'https://parkwalk-production.up.railway.app/api/v1';
 
 export default function () {
   // Get nearby entities

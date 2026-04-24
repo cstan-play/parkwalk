@@ -4,6 +4,77 @@
 
 The game entities system is designed for **maximum extensibility**. It uses a **plugin architecture** that allows adding new entity types without modifying core code.
 
+## Placement Model
+
+Most location games combine several placement modes rather than relying on one
+global scatter pass:
+
+- **Shared world spawns**: server-owned entities placed into the world and
+  visible to any eligible player. This is the default ParkWalk model today.
+- **User/session-relative spawns**: temporary entities generated near a player
+  for onboarding, testing, events, or route-based sessions.
+- **User-created entities**: treasures or meeting points manually placed by a
+  player, usually with moderation, cooldown, and anti-spam rules.
+- **Route spawns**: entities distributed along a path the player intends to
+  walk. This should be a separate placement context, not a special case inside
+  collection validation.
+
+### Phase 1 placement modes
+
+ParkWalk currently has two backend placement paths:
+
+1. **Manual/dev seed script**: `backend/prisma/seed.ts` deletes prior dev
+   entities and places a Poisson-disc cluster around `SEED_CENTER_LAT/LNG`.
+   Use this when preparing a known first-walk route.
+2. **Nearby auto-seed helper**: when `NEARBY_AUTO_SEED_ENABLED=true`,
+   `GET /api/v1/entities/nearby` tops up a shared cluster of collectibles
+   around the requested `lat/lng` if the authenticated user sees fewer than
+   `NEARBY_AUTO_SEED_TARGET_COUNT` uncollected collectibles. This is for
+   dogfooding and local testing; it is off by default.
+
+The auto-seed helper is intentionally **shared-world**, not private to one
+user. It writes real `game_entities` rows, so another user nearby can see and
+collect the same markers unless they have already collected them. It does not
+delete existing entities. Placement metadata is stored under:
+
+```json
+{
+  "placement": {
+    "source": "nearby_auto_seed",
+    "version": 1,
+    "center": { "latitude": 55.6761, "longitude": 12.5683 },
+    "radiusMeters": 140,
+    "generatedAt": "2026-04-24T10:00:00.000Z"
+  }
+}
+```
+
+Config knobs:
+
+| Env var | Purpose |
+| --- | --- |
+| `NEARBY_AUTO_SEED_ENABLED` | Enables `/nearby` top-up behavior. Keep false in production until spawn policy is finalized. |
+| `NEARBY_AUTO_SEED_TARGET_COUNT` | Number of visible uncollected collectibles to maintain around the queried location. |
+| `NEARBY_AUTO_SEED_RADIUS_METERS` | Max scatter radius around the user/query point. |
+| `NEARBY_AUTO_SEED_MIN_DISTANCE_METERS` | Avoids spawning directly on top of the user. |
+| `NEARBY_AUTO_SEED_MIN_SPACING_METERS` | Avoids overlapping markers / collection radii. |
+
+### Future placement contexts
+
+The next architectural step is a first-class `placement` module with explicit
+contexts:
+
+- `nearby_auto_seed`: dev/test dogfooding near current location.
+- `route`: generated from route geometry, placing markers every N meters with
+  jitter and walkable-way snapping.
+- `user_treasure`: user-created placement with cooldowns, creator ownership,
+  abuse limits, and max-collection rules.
+- `event`: scheduled clusters for parks, campuses, or timed alpha tests.
+
+Collection should remain independent of placement mode: once an entity exists,
+the same server-side movement validation, uncertainty-aware distance gate,
+idempotency, and duplicate-collection rules apply.
+
 ## Entity Types
 
 ### Current Types (MVP)

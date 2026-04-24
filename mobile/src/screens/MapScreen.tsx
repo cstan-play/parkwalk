@@ -64,6 +64,8 @@ export function MapScreen({ navigation }: Props): JSX.Element {
     return [-122.4194, 37.7749];
   }, [movement.latest, lastLocation]);
 
+  const nearbyEnabled = !!movement.latest || !!lastLocation;
+
   const nearbyQuery = useQuery({
     queryKey: ['nearby', roundKey(centerCoords[1]!, centerCoords[0]!)],
     queryFn: () =>
@@ -73,7 +75,7 @@ export function MapScreen({ navigation }: Props): JSX.Element {
         radiusMeters: 500,
         limit: 50,
       }),
-    enabled: !!movement.latest || !!lastLocation,
+    enabled: nearbyEnabled,
     refetchInterval: 30_000,
   });
 

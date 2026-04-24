@@ -14,10 +14,10 @@ export function describeApiError(err: unknown): string {
     const full = `${base}${path}`;
 
     if (err.code === 'ECONNABORTED') {
-      return `Timed out talking to ${full}. Confirm the backend is up and Wi‑Fi matches your Mac.`;
+      return `Timed out talking to ${full}. Confirm the hosted API is reachable and try again.`;
     }
     if (!err.response) {
-      return `${err.message ?? 'Network error'} — ${full}. On a real iPhone, 127.0.0.1/localhost points at the phone, not your Mac. Use your Mac LAN IP (from ipconfig) in API / Server, or update mobile/.env and rebuild.`;
+      return `${err.message ?? 'Network error'} — ${full}. Confirm the API URL is HTTPS and reachable from this device.`;
     }
   }
   return err instanceof Error ? err.message : 'Unknown error';

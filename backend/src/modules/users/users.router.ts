@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middleware/auth.js';
+import { asyncHandler } from '../../middleware/asyncHandler.js';
 import { notFound } from '../../errors.js';
 import { prisma } from '../../prisma.js';
 
@@ -11,7 +12,7 @@ export function buildUsersRouter(): Router {
     res.json({ user: req.user });
   });
 
-  router.get('/me/stats', authenticate, async (req, res) => {
+  router.get('/me/stats', authenticate, asyncHandler(async (req, res) => {
     const stats = await prisma.userStats.findUnique({ where: { userId: req.user!.id } });
     if (!stats) throw notFound('Stats not found');
     res.json({
@@ -38,7 +39,7 @@ export function buildUsersRouter(): Router {
         updatedAt: stats.updatedAt.toISOString(),
       },
     });
-  });
+  }));
 
   return router;
 }

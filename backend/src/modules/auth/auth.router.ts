@@ -7,6 +7,7 @@ import {
 import { Router, type Request, type Response } from 'express';
 
 import { authenticate } from '../../middleware/auth.js';
+import { asyncHandler } from '../../middleware/asyncHandler.js';
 import { createRateLimit } from '../../middleware/rateLimit.js';
 import { validate } from '../../middleware/validate.js';
 
@@ -26,35 +27,50 @@ export function buildAuthRouter(): Router {
     '/register',
     limit,
     validate(registerRequestSchema),
-    async (req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
       const result = await register(req.body, {
         ip: req.ip,
         userAgent: req.header('user-agent') ?? null,
       });
       res.status(201).json(result);
-    },
+    }),
   );
 
-  router.post('/login', limit, validate(loginRequestSchema), async (req: Request, res: Response) => {
-    const result = await login(req.body, {
-      ip: req.ip,
-      userAgent: req.header('user-agent') ?? null,
-    });
-    res.json(result);
-  });
+  router.post(
+    '/login',
+    limit,
+    validate(loginRequestSchema),
+    asyncHandler(async (req: Request, res: Response) => {
+      const result = await login(req.body, {
+        ip: req.ip,
+        userAgent: req.header('user-agent') ?? null,
+      });
+      res.json(result);
+    }),
+  );
 
-  router.post('/refresh', limit, validate(refreshRequestSchema), async (req, res) => {
-    const tokens = await refresh(req.body, {
-      ip: req.ip,
-      userAgent: req.header('user-agent') ?? null,
-    });
-    res.json({ tokens });
-  });
+  router.post(
+    '/refresh',
+    limit,
+    validate(refreshRequestSchema),
+    asyncHandler(async (req, res) => {
+      const tokens = await refresh(req.body, {
+        ip: req.ip,
+        userAgent: req.header('user-agent') ?? null,
+      });
+      res.json({ tokens });
+    }),
+  );
 
-  router.post('/logout', authenticate, validate(refreshRequestSchema), async (req, res) => {
-    await logout(req.body.refreshToken);
-    res.status(204).send();
-  });
+  router.post(
+    '/logout',
+    authenticate,
+    validate(refreshRequestSchema),
+    asyncHandler(async (req, res) => {
+      await logout(req.body.refreshToken);
+      res.status(204).send();
+    }),
+  );
 
   router.get('/me', authenticate, (req, res) => {
     res.json({ user: req.user });
