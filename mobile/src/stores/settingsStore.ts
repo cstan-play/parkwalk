@@ -12,16 +12,15 @@ function stripTrailingSlash(url: string): string {
 
 function requireHttpsApiUrl(url: string, source: string): string {
   const normalized = stripTrailingSlash(url.trim());
-  try {
-    const parsed = new URL(normalized);
-    if (parsed.protocol !== 'https:') {
-      throw new Error(`${source} must use https://`);
-    }
-    return normalized;
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('https://')) throw err;
+  if (!normalized.startsWith('https://')) {
+    throw new Error(`${source} must use https://`);
+  }
+  const hostAndPath = normalized.slice('https://'.length);
+  const host = hostAndPath.split('/')[0] ?? '';
+  if (!host || host.includes(' ') || !host.includes('.')) {
     throw new Error(`${source} must be a valid HTTPS URL`);
   }
+  return normalized;
 }
 
 export function normalizeApiBaseUrl(url: string): string {
