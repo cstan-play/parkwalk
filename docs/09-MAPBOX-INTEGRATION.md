@@ -1,8 +1,43 @@
 # Mapbox Integration & Custom Map Styling
 
+> Status note, 2026-04-27: the current iOS app uses Mapbox Streets through
+> `@rnmapbox/maps`. Custom styles and offline tile packs are Alpha follow-ups,
+> not completed work.
+
 ## Overview
 
-Custom map styling is what makes this app feel like a **game** rather than just another map app. This guide covers creating unique map aesthetics and implementing them across mobile and web.
+Custom map styling is what makes this app feel like a **game** rather than just
+another map app. This guide covers creating unique map aesthetics and
+implementing them across mobile and web.
+
+## Current Mobile Map Behavior
+
+The Phase 1 iOS map lives in `mobile/src/screens/MapScreen.tsx` and uses
+`@rnmapbox/maps` with Mapbox Streets.
+
+- `MapboxGL.UserLocation` renders the user's current location.
+- `MapboxGL.Camera` starts in follow-user mode at zoom 16.
+- Nearby collectibles render as `PointAnnotation` markers.
+- Tapping a marker runs the uncertainty-aware local distance check before
+  sending the collect request.
+- The map has no field-debug overlay.
+
+### Recenter control
+
+ParkWalk includes a Google Maps-style recenter button for when the user pans
+away from their own location:
+
+1. `MapScreen` keeps refs to both `MapView` and `Camera`.
+2. When `onCameraChanged` reports an active gesture, the map leaves follow mode.
+3. The screen checks the latest GPS coordinate against the visible map bounds
+   from Mapbox (`state.properties.bounds` / `getVisibleBounds()`).
+4. If the user coordinate is outside the viewport, a floating round button is
+   shown in the lower-right of the map.
+5. Pressing the button calls `camera.flyTo(latestUserCoordinate, 600)`, restores
+   follow-user mode, and hides the control.
+
+The button is intentionally not part of the removed debug overlay; it is a
+normal navigation affordance for field use.
 
 ## Mapbox Studio Setup
 
@@ -21,11 +56,13 @@ Custom map styling is what makes this app feel like a **game** rather than just 
 **Option A: Start from Template**
 
 Mapbox Studio → Styles → New Style → Choose template:
+
 - **Monochrome**: Clean, minimal look
 - **Outdoors**: Nature-focused for walking
 - **Navigation**: Clear paths and roads
 
 **Option B: Start from Scratch**
+
 - Blank style gives full control
 - More work but completely unique
 
@@ -173,11 +210,7 @@ Mapbox Studio → Styles → New Style → Choose template:
       "source-layer": "road",
       "paint": {
         "line-color": "#e0e0e0",
-        "line-width": [
-          "interpolate", ["linear"], ["zoom"],
-          12, 0.5,
-          16, 2
-        ]
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 16, 2]
       }
     },
     {
@@ -241,7 +274,7 @@ interface EntityMarkerProps {
 const EntityMarker: React.FC<EntityMarkerProps> = ({ entity, onPress }) => {
   const markerIcon = getMarkerIcon(entity.type);
   const markerColor = getMarkerColor(entity.type, entity.config.rarity);
-  
+
   return (
     <MapboxGL.MarkerView
       id={entity.id}
@@ -295,7 +328,7 @@ function getMarkerColor(type: string, rarity?: string): string {
     };
     return rarityColors[rarity as keyof typeof rarityColors] || '#9E9E9E';
   }
-  
+
   const typeColors = {
     collectible: '#4CAF50',
     challenge: '#FF5722',
@@ -310,7 +343,7 @@ function getMarkerColor(type: string, rarity?: string): string {
 ```typescript
 const AnimatedUserLocation: React.FC = () => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -327,7 +360,7 @@ const AnimatedUserLocation: React.FC = () => {
       ])
     ).start();
   }, []);
-  
+
   return (
     <MapboxGL.UserLocation
       visible
@@ -354,7 +387,7 @@ const CollectionRadius: React.FC<{ entity: GameEntity }> = ({ entity }) => {
     const center = [entity.location.lng, entity.location.lat];
     const radiusInKm = entity.collection_radius_meters / 1000;
     const points = 64;
-    
+
     const coords = [];
     for (let i = 0; i <= points; i++) {
       const angle = (i / points) * 2 * Math.PI;
@@ -365,10 +398,10 @@ const CollectionRadius: React.FC<{ entity: GameEntity }> = ({ entity }) => {
         center[1] + dy / 110.574,
       ]);
     }
-    
+
     return coords;
   }, [entity]);
-  
+
   return (
     <MapboxGL.ShapeSource
       id={`radius-${entity.id}`}
@@ -419,10 +452,12 @@ const map = new mapboxgl.Map({
 
 // Add controls
 map.addControl(new mapboxgl.NavigationControl());
-map.addControl(new mapboxgl.GeolocateControl({
-  positionOptions: { enableHighAccuracy: true },
-  trackUserLocation: true,
-}));
+map.addControl(
+  new mapboxgl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+  }),
+);
 ```
 
 ### Custom Markers
@@ -443,31 +478,30 @@ const createMarkerElement = (entity: GameEntity): HTMLElement => {
   el.style.fontSize = '20px';
   el.style.cursor = 'pointer';
   el.innerHTML = getMarkerIcon(entity.type);
-  
+
   // Add pulse animation
   el.style.animation = 'pulse 2s infinite';
-  
+
   return el;
 };
 
 // Add markers
-entities.forEach(entity => {
+entities.forEach((entity) => {
   const el = createMarkerElement(entity);
-  
+
   const marker = new mapboxgl.Marker(el)
     .setLngLat([entity.location.lng, entity.location.lat])
     .addTo(map);
-  
+
   // Add popup
-  const popup = new mapboxgl.Popup({ offset: 25 })
-    .setHTML(`
+  const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
       <div class="entity-popup">
         <h3>${entity.config.name}</h3>
         <p>${entity.type}</p>
         <button onclick="collectEntity('${entity.id}')">Collect</button>
       </div>
     `);
-  
+
   marker.setPopup(popup);
 });
 ```
@@ -476,7 +510,8 @@ entities.forEach(entity => {
 
 ```css
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
@@ -522,7 +557,7 @@ map.on('load', () => {
     type: 'geojson',
     data: {
       type: 'FeatureCollection',
-      features: entities.map(entity => ({
+      features: entities.map((entity) => ({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -539,7 +574,7 @@ map.on('load', () => {
     clusterMaxZoom: 14,
     clusterRadius: 50,
   });
-  
+
   // Cluster layer
   map.addLayer({
     id: 'clusters',
@@ -547,23 +582,11 @@ map.on('load', () => {
     source: 'entities',
     filter: ['has', 'point_count'],
     paint: {
-      'circle-color': [
-        'step',
-        ['get', 'point_count'],
-        '#51bbd6', 10,
-        '#f1f075', 30,
-        '#f28cb1',
-      ],
-      'circle-radius': [
-        'step',
-        ['get', 'point_count'],
-        20, 10,
-        30, 30,
-        40,
-      ],
+      'circle-color': ['step', ['get', 'point_count'], '#51bbd6', 10, '#f1f075', 30, '#f28cb1'],
+      'circle-radius': ['step', ['get', 'point_count'], 20, 10, 30, 30, 40],
     },
   });
-  
+
   // Cluster count
   map.addLayer({
     id: 'cluster-count',
@@ -576,7 +599,7 @@ map.on('load', () => {
       'text-size': 12,
     },
   });
-  
+
   // Unclustered point
   map.addLayer({
     id: 'unclustered-point',
@@ -603,7 +626,7 @@ Only load entities in visible area:
 const loadEntitiesInBounds = async (bounds: mapboxgl.LngLatBounds) => {
   const ne = bounds.getNorthEast();
   const sw = bounds.getSouthWest();
-  
+
   const entities = await apiClient.get('/entities/in-bounds', {
     params: {
       north: ne.lat,
@@ -612,7 +635,7 @@ const loadEntitiesInBounds = async (bounds: mapboxgl.LngLatBounds) => {
       west: sw.lng,
     },
   });
-  
+
   updateMarkers(entities.data);
 };
 
@@ -629,20 +652,20 @@ Reuse marker instances:
 class MarkerPool {
   private available: mapboxgl.Marker[] = [];
   private active: Map<string, mapboxgl.Marker> = new Map();
-  
+
   acquire(entity: GameEntity): mapboxgl.Marker {
     let marker = this.available.pop();
-    
+
     if (!marker) {
       marker = new mapboxgl.Marker();
     }
-    
+
     marker.setLngLat([entity.location.lng, entity.location.lat]);
     this.active.set(entity.id, marker);
-    
+
     return marker;
   }
-  
+
   release(entityId: string): void {
     const marker = this.active.get(entityId);
     if (marker) {

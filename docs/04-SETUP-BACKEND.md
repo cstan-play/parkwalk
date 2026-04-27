@@ -1,5 +1,24 @@
 # Backend Setup Guide
 
+> Status note, 2026-04-27: this is mostly a historical scaffold guide. The
+> backend already exists in `backend/`; for the current hosted path use
+> `14-DEPLOY-RAILWAY.md`, and for the current project handoff use
+> `00-CURRENT-STATUS.md`.
+
+## Current local backend loop
+
+```bash
+npm install
+npm run infra:up
+cd backend
+cp .env.example .env
+npx prisma migrate deploy
+npm run dev
+```
+
+Health checks are at `http://localhost:3000/health` and `/ready`. API routes
+are under `/api/v1`.
+
 ## Prerequisites
 
 - Node.js 18+ and npm
@@ -156,6 +175,7 @@ MOVEMENT_VALIDATION_CONFIDENCE_THRESHOLD=0.7
 ```
 
 Copy to `.env`:
+
 ```bash
 cp .env.example .env
 # Edit .env with your actual values
@@ -166,12 +186,14 @@ cp .env.example .env
 #### Install PostgreSQL with PostGIS
 
 **macOS:**
+
 ```bash
 brew install postgresql@15 postgis
 brew services start postgresql@15
 ```
 
 **Linux (Ubuntu/Debian):**
+
 ```bash
 sudo apt update
 sudo apt install postgresql-15 postgresql-15-postgis-3
@@ -239,6 +261,7 @@ model User {
 ```
 
 Run migrations:
+
 ```bash
 npx prisma migrate dev --name init
 npx prisma generate
@@ -247,18 +270,21 @@ npx prisma generate
 ### 7. Redis Setup
 
 **macOS:**
+
 ```bash
 brew install redis
 brew services start redis
 ```
 
 **Linux:**
+
 ```bash
 sudo apt install redis-server
 sudo systemctl start redis
 ```
 
 Test connection:
+
 ```bash
 redis-cli ping
 # Should respond: PONG
@@ -371,10 +397,12 @@ const app: Application = express();
 app.use(helmet());
 
 // CORS
-app.use(cors({
-  origin: env.ALLOWED_ORIGINS?.split(',') || '*',
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: env.ALLOWED_ORIGINS?.split(',') || '*',
+    credentials: true,
+  }),
+);
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
@@ -435,7 +463,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server');
-  
+
   server.close(async () => {
     await prisma.$disconnect();
     await redis.quit();

@@ -1,10 +1,17 @@
 # API Specification
 
+> Status note, 2026-04-27: this document mixes implemented REST contracts with
+> planned API surface. The source of truth for live routes is `backend/src/app.ts`
+> plus the routers under `backend/src/modules/**`. WebSocket endpoints are not
+> implemented yet.
+
 ## Overview
 
-RESTful API with WebSocket support for real-time features. All endpoints use JSON for request/response bodies.
+RESTful API today, with WebSocket support planned for later real-time features.
+All endpoints use JSON for request/response bodies.
 
-**Base URL:** `https://api.walkinggame.com/api/v1`
+**Base URL:** `https://parkwalk-production.up.railway.app/api/v1` for the
+current hosted backend, or the same path on a hosted staging Railway origin.
 
 **Authentication:** JWT Bearer tokens
 
@@ -25,6 +32,7 @@ Content-Type: application/json
 ```
 
 **Response 201:**
+
 ```json
 {
   "user": {
@@ -43,6 +51,7 @@ Content-Type: application/json
 ```
 
 **Errors:**
+
 - `400` - Validation error (username taken, invalid email, weak password)
 - `429` - Rate limit exceeded
 
@@ -59,6 +68,7 @@ Content-Type: application/json
 ```
 
 **Response 200:**
+
 ```json
 {
   "user": {
@@ -87,6 +97,7 @@ Content-Type: application/json
 ```
 
 **Response 200:**
+
 ```json
 {
   "access_token": "eyJhbGc...",
@@ -118,6 +129,7 @@ Authorization: Bearer {access_token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "id": "uuid",
@@ -157,6 +169,7 @@ Authorization: Bearer {access_token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "distance": {
@@ -198,6 +211,7 @@ Authorization: Bearer {access_token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "id": "uuid",
@@ -237,6 +251,7 @@ user has already collected are **omitted** so the map does not show completed
 pick-ups again.
 
 **Response 200:**
+
 ```json
 {
   "items": [
@@ -268,6 +283,7 @@ Authorization: Bearer {access_token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "id": "uuid",
@@ -316,6 +332,7 @@ collectedAt, distanceFromEntityMeters, movementValidated) and `rewards`
 (pointsEarned, streakDays, dailyScore, allTimeScore).
 
 **Errors (non-exhaustive):**
+
 - `400` `VALIDATION_ERROR` — malformed body or missing `Idempotency-Key`
 - `400` `MOVEMENT_INVALID` — failed `validateMovement` (hard reject); body
   may include `reasons` and `flags`
@@ -349,6 +366,7 @@ Content-Type: application/json
 ```
 
 **Response 201:**
+
 ```json
 {
   "id": "uuid",
@@ -370,6 +388,7 @@ Content-Type: application/json
 ```
 
 **Errors:**
+
 - `400` - Invalid location or config
 - `403` - Insufficient permissions or rate limit
 
@@ -391,6 +410,7 @@ Content-Type: application/json
 **Response 200:** Updated entity object
 
 **Errors:**
+
 - `403` - Not the creator
 - `404` - Entity not found
 
@@ -404,6 +424,7 @@ Authorization: Bearer {access_token}
 **Response 204:** No content
 
 **Errors:**
+
 - `403` - Not the creator
 - `404` - Entity not found
 
@@ -417,13 +438,16 @@ Authorization: Bearer {access_token}
 ```
 
 **Path Parameters:**
+
 - `period`: `daily`, `weekly`, or `all_time`
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Results per page (default: 50, max: 100)
 
 **Response 200:**
+
 ```json
 {
   "period": "daily",
@@ -461,6 +485,7 @@ Authorization: Bearer {access_token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "period": "daily",
@@ -483,10 +508,12 @@ Authorization: Bearer {access_token}
 ```
 
 **Query Parameters:**
+
 - `limit` (optional): Number of activities (default: 50, max: 100)
 - `before` (optional): Timestamp for pagination (ISO 8601)
 
 **Response 200:**
+
 ```json
 {
   "activities": [
@@ -568,6 +595,7 @@ Content-Type: application/json
 ```
 
 **Response 200:**
+
 ```json
 {
   "validation": {
@@ -586,10 +614,13 @@ Content-Type: application/json
 ```
 
 **Errors:**
+
 - `400` - Invalid movement data or suspicious patterns detected
 - `429` - Too many validation requests
 
 ## WebSocket API
+
+Planned only. No WebSocket server is wired in the current backend.
 
 ### Connection
 
@@ -597,8 +628,8 @@ Content-Type: application/json
 // Connect to WebSocket
 const socket = io('wss://api.walkinggame.com', {
   auth: {
-    token: 'Bearer eyJhbGc...'
-  }
+    token: 'Bearer eyJhbGc...',
+  },
 });
 ```
 
@@ -733,17 +764,18 @@ All error responses follow this format:
 
 ## Rate Limits
 
-| Endpoint | Rate Limit |
-|----------|------------|
-| POST /auth/register | 5 per hour per IP |
-| POST /auth/login | 10 per hour per IP |
-| POST /entities/collect | 1 per second per user |
-| POST /entities/treasure | 10 per hour per user |
-| GET /entities/nearby | 60 per minute per user |
-| GET /leaderboard/* | 120 per minute per user |
+| Endpoint                | Rate Limit               |
+| ----------------------- | ------------------------ |
+| POST /auth/register     | 5 per hour per IP        |
+| POST /auth/login        | 10 per hour per IP       |
+| POST /entities/collect  | 1 per second per user    |
+| POST /entities/treasure | 10 per hour per user     |
+| GET /entities/nearby    | 60 per minute per user   |
+| GET /leaderboard/\*     | 120 per minute per user  |
 | POST /movement/validate | 1 per 5 seconds per user |
 
 Rate limit headers:
+
 ```
 X-RateLimit-Limit: 60
 X-RateLimit-Remaining: 42
@@ -759,6 +791,7 @@ GET /activities/feed?limit=50&cursor=eyJpZCI6InV1aWQiLCJ0cyI6MTY0MjI2NzIwMH0=
 ```
 
 Response includes cursor for next page:
+
 ```json
 {
   "data": [...],

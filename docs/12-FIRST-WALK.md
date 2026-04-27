@@ -22,6 +22,8 @@ if Phase 1 correctness is real.
       hosted HTTPS Railway/staging URL.
 - [ ] Xcode project is signed with your Personal Team, Background Modes
       capability has **Location updates** checked.
+- [ ] You know where you will verify the result: Railway logs, database query
+      tool, Railway CLI, or Prisma Studio connected to the Railway database.
 
 ## Step 1 — Verify hosted services
 
@@ -55,6 +57,7 @@ cd mobile && npm start
 Wait ~30-60 seconds for first build. App opens on phone.
 
 First launch prompts:
+
 - "Allow ParkWalk to use your location" → **Always Allow** (for
   background GPS during walks).
 - "Allow ParkWalk to access motion and fitness" → Allow.
@@ -62,6 +65,7 @@ First launch prompts:
 ## Step 3 — Register an account
 
 In the app: Onboarding → Create account.
+
 - Username: any (e.g. `walktester`).
 - Email: any real format (not verified in Phase 1).
 - Password: 8+ chars.
@@ -94,13 +98,16 @@ Alternative: use `docs/14-DEPLOY-RAILWAY.md` Step 10 to run
 - Leave the app in the foreground and start walking outside when you can
   (GPS indoors on a campus can work but expect ±15–40 m accuracy; the app
   uses uncertainty-aware distance for collects).
-- Within ~15 seconds, the overlay should often say **state: WALKING_VALID**
-  while moving (speed is the primary signal; see `docs/07-MOVEMENT-DETECTION.md`).
+- There is currently no on-map debug overlay. Let GPS settle for roughly
+  15 seconds before testing a collect.
+- If you pan away and your blue location dot is no longer visible, a round
+  lower-right recenter button should appear. Tap it to fly the map back to your
+  current location and resume follow mode.
 - As you approach a seeded collectible, its marker should appear and you
   can **tap the marker** to collect (there is no separate collect button).
-- Watch **nearest: Xm ±Ym (need ≤Nm)** in the overlay — that is live distance
-  and GPS uncertainty vs the entity radius; it should line up with server
-  behavior better than the cached distance from the last `/nearby` response.
+- The client uses live GPS distance plus capped horizontal accuracy for the
+  local "Too far" check. The backend re-validates with the same uncertainty-aware
+  distance rule.
 - Tap → collect → success alert → `+N points`. The marker should **disappear**
   on the next nearby refetch (up to ~30 s) because the API excludes entities
   you already collected.
@@ -170,13 +177,12 @@ regressions can compare against real data, not synthetic.
   screen shows an `https://` Railway URL, then open `/health` from iPhone
   Safari. If Railway is reachable in Safari but not the app, rebuild after
   editing `mobile/.env`.
-- **Map loads but state stays UNKNOWN**: GPS has no samples. Walk outdoors
-  with open sky. If still stuck, check that location permission is
-  `Always` and motion is `Allowed`.
-- **Tap says "Too far" while the dot looks close**: check **nearest: Xm ±Ym**
-  on the overlay — stale map perception vs true fix, or GPS uncertainty.
-  Walk a few meters; if it persists, compare with `docs/07-MOVEMENT-DETECTION.md`
-  (uncertainty-aware collect).
+- **Map loads but collect says there is no movement summary**: GPS has no
+  samples yet. Walk outdoors with open sky. If still stuck, check that location
+  permission is `Always` and motion is `Allowed`.
+- **Tap says "Too far" while the dot looks close**: stale map perception vs
+  true fix, or GPS uncertainty. Walk a few meters; if it persists, compare with
+  `docs/07-MOVEMENT-DETECTION.md` (uncertainty-aware collect).
 - **Collect returns 400 MOVEMENT_INVALID while walking**: compare the
   rejected summary with `walking.json` fixture. Most common causes: GPS
   accuracy too poor (urban canyon), or step count delta too low (holding
@@ -186,8 +192,11 @@ regressions can compare against real data, not synthetic.
 - **Collect returns 409 ALREADY_COLLECTED**: you already have that
   collectible. Walk to a different one.
 
-## Move to Phase 2 when one of these becomes true
+## After This Walk
 
-- You want a friend to test → enroll Apple Developer Program, TestFlight.
-- You're tired of re-signing every 7 days → enroll Apple Developer Program.
-- You want realtime / social features → Socket.IO + web dashboard.
+- If the collect succeeds, save a real movement fixture and move to the Alpha P0
+  native pedometer/HealthKit milestone in `00-CURRENT-STATUS.md`.
+- If a friend needs to test or free signing becomes too painful, enroll in the
+  Apple Developer Program and set up TestFlight.
+- If the walk loop is stable and social/product work becomes the priority,
+  start the friends/activity/leaderboard/dashboard slice.

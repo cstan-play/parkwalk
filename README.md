@@ -75,12 +75,15 @@ open ios/ParkWalk.xcworkspace
 See `docs/12-FIRST-WALK.md` for the full checklist.
 
 Quick version:
+
 1. Check `https://<railway-url>/health` and `/ready`.
 2. In the app Settings, confirm the API URL is the hosted HTTPS API.
 3. Build & Run on iPhone from Xcode.
-4. Register, walk until the overlay often shows `WALKING_VALID`, tap a nearby
-   marker to collect (see `docs/07-MOVEMENT-DETECTION.md` for movement +
-   distance rules).
+4. Register, grant permissions, walk outside, and tap a nearby marker to
+   collect. Verify success in the app and with the database checks in
+   `docs/12-FIRST-WALK.md`.
+
+Current handoff: `docs/00-CURRENT-STATUS.md`.
 
 ## Phase 1 scope (what this repo does today)
 
@@ -90,7 +93,7 @@ Quick version:
 - Committed movement fixtures (walking / driving / teleport-spoof) with passing tests.
 - Local docker Postgres+PostGIS+Redis for backend integration tests.
 
-## Phase 1 scope (what this repo explicitly defers to Phase 2)
+## Not in the current walk loop
 
 - Web dashboard.
 - Realtime WebSocket (leaderboard, activity feed) — pull-based in Phase 1.
@@ -99,4 +102,5 @@ Quick version:
 - Challenge and MeetingPoint entity types.
 - Android build.
 
-See the foundation plan for full Phase 2 trigger conditions.
+See `docs/00-CURRENT-STATUS.md` for the current phase breakdown and next
+milestones.

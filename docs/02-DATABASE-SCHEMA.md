@@ -1,5 +1,9 @@
 # Database Schema
 
+> Status note, 2026-04-27: `backend/prisma/schema.prisma` and migrations are
+> the source of truth for the implemented Phase 1 subset. This document also
+> includes future tables and fields for the broader product design.
+
 ## Overview
 
 The database uses **PostgreSQL 15+** with the **PostGIS** extension for geospatial functionality. The schema is designed for extensibility while maintaining performance for spatial queries.
@@ -36,7 +40,7 @@ CREATE TABLE users (
   last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   is_active BOOLEAN DEFAULT true,
   settings JSONB DEFAULT '{}'::jsonb,
-  
+
   -- Constraints
   CONSTRAINT valid_username CHECK (username ~ '^[a-zA-Z0-9_]{3,50}$'),
   CONSTRAINT valid_email CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$')
@@ -49,6 +53,7 @@ CREATE INDEX idx_users_last_active ON users(last_active_at DESC);
 ```
 
 **Settings JSONB Structure:**
+
 ```json
 {
   "notifications_enabled": true,
@@ -65,39 +70,39 @@ Aggregated user statistics for leaderboards and profile display.
 ```sql
 CREATE TABLE user_stats (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  
+
   -- Distance
   total_distance_meters BIGINT DEFAULT 0,
   daily_distance_meters BIGINT DEFAULT 0,
   weekly_distance_meters BIGINT DEFAULT 0,
-  
+
   -- Collections
   total_collections INTEGER DEFAULT 0,
   daily_collections INTEGER DEFAULT 0,
   weekly_collections INTEGER DEFAULT 0,
-  
+
   -- Treasures
   treasures_placed INTEGER DEFAULT 0,
   treasures_found_by_others INTEGER DEFAULT 0,
-  
+
   -- Time
   total_walking_minutes INTEGER DEFAULT 0,
   daily_walking_minutes INTEGER DEFAULT 0,
-  
+
   -- Streaks
   current_streak_days INTEGER DEFAULT 0,
   longest_streak_days INTEGER DEFAULT 0,
   last_activity_date DATE,
-  
+
   -- Scores (for leaderboards)
   daily_score INTEGER DEFAULT 0,
   weekly_score INTEGER DEFAULT 0,
   all_time_score INTEGER DEFAULT 0,
-  
+
   -- Reset timestamps
   daily_reset_at TIMESTAMP WITH TIME ZONE,
   weekly_reset_at TIMESTAMP WITH TIME ZONE,
-  
+
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -115,31 +120,31 @@ Polymorphic table for all game objects (treasures, collectibles, challenges, mee
 ```sql
 CREATE TABLE game_entities (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  
+
   -- Type and ownership
   type VARCHAR(50) NOT NULL, -- 'treasure', 'collectible', 'challenge', 'meeting_point'
   creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  
+
   -- Location (PostGIS)
   location GEOGRAPHY(POINT, 4326) NOT NULL,
-  
+
   -- Visibility and state
   active BOOLEAN DEFAULT true,
   visible_from TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   visible_until TIMESTAMP WITH TIME ZONE,
-  
+
   -- Type-specific configuration
   config JSONB NOT NULL DEFAULT '{}'::jsonb,
-  
+
   -- Collection rules
   collection_radius_meters INTEGER DEFAULT 10,
   max_collections INTEGER, -- NULL = unlimited
   current_collections INTEGER DEFAULT 0,
-  
+
   -- Metadata
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
+
   -- Constraints
   CONSTRAINT valid_entity_type CHECK (type IN ('treasure', 'collectible', 'challenge', 'meeting_point')),
   CONSTRAINT valid_collection_radius CHECK (collection_radius_meters BETWEEN 5 AND 100)
@@ -152,7 +157,7 @@ CREATE INDEX idx_game_entities_location ON game_entities USING GIST(location);
 CREATE INDEX idx_game_entities_type_active ON game_entities(type, active) WHERE active = true;
 
 -- Visibility queries
-CREATE INDEX idx_game_entities_visibility ON game_entities(visible_from, visible_until) 
+CREATE INDEX idx_game_entities_visibility ON game_entities(visible_from, visible_until)
   WHERE active = true;
 
 -- Creator lookup
@@ -162,6 +167,7 @@ CREATE INDEX idx_game_entities_creator ON game_entities(creator_id) WHERE creato
 **Config JSONB by Type:**
 
 **Treasure:**
+
 ```json
 {
   "name": "Golden Coin",
@@ -174,6 +180,7 @@ CREATE INDEX idx_game_entities_creator ON game_entities(creator_id) WHERE creato
 ```
 
 **Collectible (Fixed Spawn):**
+
 ```json
 {
   "name": "City Badge",
@@ -185,6 +192,7 @@ CREATE INDEX idx_game_entities_creator ON game_entities(creator_id) WHERE creato
 ```
 
 **Challenge:**
+
 ```json
 {
   "name": "Morning Walker",
@@ -199,6 +207,7 @@ CREATE INDEX idx_game_entities_creator ON game_entities(creator_id) WHERE creato
 ```
 
 **Meeting Point:**
+
 ```json
 {
   "name": "Community Walk Start",
@@ -217,22 +226,22 @@ CREATE TABLE user_collections (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   entity_id UUID NOT NULL REFERENCES game_entities(id) ON DELETE CASCADE,
-  
+
   -- Collection details
   collected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
+
   -- Validation data
   user_location GEOGRAPHY(POINT, 4326) NOT NULL,
   distance_from_entity_meters DECIMAL(10, 2),
   movement_validated BOOLEAN NOT NULL,
   movement_state VARCHAR(50), -- 'WALKING_VALID', 'INVALID', etc.
-  
+
   -- Movement data snapshot (for auditing)
   movement_data JSONB,
-  
+
   -- Rewards
   points_earned INTEGER DEFAULT 0,
-  
+
   CONSTRAINT unique_user_entity_collection UNIQUE(user_id, entity_id)
 );
 
@@ -244,6 +253,7 @@ CREATE INDEX idx_user_collections_validation ON user_collections(movement_valida
 ```
 
 **Movement Data JSONB:**
+
 ```json
 {
   "gps_speed_mps": 1.2,
@@ -263,21 +273,21 @@ Activity feed items for social features.
 CREATE TABLE activities (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  
+
   -- Activity type
   activity_type VARCHAR(50) NOT NULL,
-  
+
   -- Activity data
   data JSONB NOT NULL,
-  
+
   -- Optional related entity
   related_entity_id UUID REFERENCES game_entities(id) ON DELETE SET NULL,
-  
+
   -- Metadata
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
+
   CONSTRAINT valid_activity_type CHECK (activity_type IN (
-    'collection', 'treasure_placed', 'challenge_completed', 
+    'collection', 'treasure_placed', 'challenge_completed',
     'achievement_unlocked', 'streak_milestone'
   ))
 );
@@ -286,7 +296,7 @@ CREATE TABLE activities (
 CREATE INDEX idx_activities_user ON activities(user_id, created_at DESC);
 CREATE INDEX idx_activities_type ON activities(activity_type, created_at DESC);
 CREATE INDEX idx_activities_created ON activities(created_at DESC);
-CREATE INDEX idx_activities_related_entity ON activities(related_entity_id) 
+CREATE INDEX idx_activities_related_entity ON activities(related_entity_id)
   WHERE related_entity_id IS NOT NULL;
 ```
 
@@ -326,16 +336,16 @@ Active user sessions for authentication.
 CREATE TABLE sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  
+
   -- Token info
   refresh_token_hash VARCHAR(255) NOT NULL,
   device_info JSONB,
-  
+
   -- Session metadata
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   last_used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  
+
   -- IP and location (for security)
   ip_address INET,
   user_agent TEXT
@@ -359,11 +369,11 @@ CREATE TABLE user_achievements (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   achievement_type VARCHAR(100) NOT NULL,
-  
+
   -- Achievement data
   unlocked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   progress_data JSONB,
-  
+
   CONSTRAINT unique_user_achievement UNIQUE(user_id, achievement_type)
 );
 
@@ -377,7 +387,7 @@ CREATE INDEX idx_user_achievements_type ON user_achievements(achievement_type);
 
 ```sql
 -- Find all active entities within 100 meters of user
-SELECT 
+SELECT
   id,
   type,
   config->>'name' as name,
@@ -386,7 +396,7 @@ SELECT
     ST_MakePoint($userLng, $userLat)::geography
   ) as distance_meters
 FROM game_entities
-WHERE 
+WHERE
   active = true
   AND ST_DWithin(
     location,
@@ -405,7 +415,7 @@ LIMIT 50;
 SELECT EXISTS (
   SELECT 1
   FROM game_entities
-  WHERE 
+  WHERE
     id = $entityId
     AND active = true
     AND ST_DWithin(
@@ -420,12 +430,12 @@ SELECT EXISTS (
 
 ```sql
 -- Find areas with most collections (for heatmap visualization)
-SELECT 
+SELECT
   ST_X(location::geometry) as lng,
   ST_Y(location::geometry) as lat,
   COUNT(*) as collection_count
 FROM user_collections
-WHERE 
+WHERE
   collected_at > NOW() - INTERVAL '7 days'
   AND movement_validated = true
 GROUP BY ST_SnapToGrid(location::geometry, 0.001) -- ~100m grid
@@ -470,7 +480,7 @@ CREATE TABLE user_collections_2025_01 PARTITION OF user_collections
 ```sql
 -- Reset daily stats (run via cron)
 UPDATE user_stats
-SET 
+SET
   daily_distance_meters = 0,
   daily_collections = 0,
   daily_walking_minutes = 0,
@@ -484,7 +494,7 @@ WHERE daily_reset_at < CURRENT_DATE;
 ```sql
 -- Reset weekly stats (run via cron on Sunday)
 UPDATE user_stats
-SET 
+SET
   weekly_distance_meters = 0,
   weekly_collections = 0,
   weekly_score = 0,
@@ -498,7 +508,7 @@ WHERE weekly_reset_at < DATE_TRUNC('week', CURRENT_DATE);
 -- Mark expired entities as inactive
 UPDATE game_entities
 SET active = false
-WHERE 
+WHERE
   active = true
   AND visible_until IS NOT NULL
   AND visible_until < NOW();

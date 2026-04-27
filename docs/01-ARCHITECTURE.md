@@ -1,5 +1,10 @@
 # System Architecture
 
+> Status note, 2026-04-27: this is the architecture direction, not a literal
+> inventory of implemented services. The current running system is a modular
+> Express REST backend plus the iOS app. Android, web dashboard, and WebSocket
+> real-time features are planned later; see `00-CURRENT-STATUS.md`.
+
 ## Overview
 
 The system is designed as a **microservices-oriented architecture** with three main client applications (iOS, Android, Web) communicating with a unified backend through REST and WebSocket APIs.
@@ -51,6 +56,7 @@ The system is designed as a **microservices-oriented architecture** with three m
 ### 1. Mobile Applications (React Native)
 
 #### Layer Structure
+
 ```
 Mobile App
 ├── Presentation Layer
@@ -80,18 +86,21 @@ Mobile App
 #### Key Modules
 
 **Movement Detection Engine**
+
 - Fuses GPS, accelerometer, and activity recognition data
 - Validates genuine walking vs vehicle/bike movement
 - Runs on background thread to avoid UI blocking
 - Accuracy: 95%+ for walking detection
 
 **Game State Manager**
+
 - Manages current game session
 - Tracks user position, collected items, active challenges
 - Syncs with backend periodically
 - Handles offline scenarios
 
 **Collection Validator**
+
 - Checks if user can collect an entity
 - Validates proximity (within 10m)
 - Validates movement state (must be walking)
@@ -100,9 +109,11 @@ Mobile App
 ### 2. Backend Services
 
 #### Game Service
+
 Handles all game-related logic and entities.
 
 **Responsibilities:**
+
 - CRUD operations for game entities (treasures, collectibles, challenges)
 - Proximity queries (PostGIS)
 - Collection validation
@@ -110,15 +121,18 @@ Handles all game-related logic and entities.
 - Challenge progression tracking
 
 **Key Endpoints:**
+
 - `GET /api/v1/entities/nearby` - Find entities near user
 - `POST /api/v1/entities/collect` - Collect an entity
 - `POST /api/v1/entities/treasure` - Place a treasure
 - `GET /api/v1/entities/:id` - Get entity details
 
 #### User Service
+
 Manages user accounts, authentication, and stats.
 
 **Responsibilities:**
+
 - User registration/login
 - Profile management
 - Stats calculation and aggregation
@@ -126,6 +140,7 @@ Manages user accounts, authentication, and stats.
 - Session management
 
 **Key Endpoints:**
+
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/users/me`
@@ -133,9 +148,11 @@ Manages user accounts, authentication, and stats.
 - `PATCH /api/v1/users/me`
 
 #### Social Service
+
 Handles leaderboards, activity feeds, and future social features.
 
 **Responsibilities:**
+
 - Leaderboard calculation (daily/weekly/all-time)
 - Activity feed generation
 - Real-time updates via WebSocket
@@ -143,11 +160,13 @@ Handles leaderboards, activity feeds, and future social features.
 - Notifications (future)
 
 **Key Endpoints:**
+
 - `GET /api/v1/leaderboard/:period`
 - `GET /api/v1/activities/feed`
 - `POST /api/v1/activities` - Log activity
 
 **WebSocket Events:**
+
 - `leaderboard:update` - Leaderboard changed
 - `activity:new` - New activity in feed
 - `entity:collected` - Someone collected nearby entity
@@ -155,6 +174,7 @@ Handles leaderboards, activity feeds, and future social features.
 ### 3. Web Dashboard
 
 #### Architecture
+
 ```
 Web Dashboard
 ├── Pages
@@ -181,6 +201,7 @@ Web Dashboard
 ```
 
 **Key Features:**
+
 - View all game entities on map
 - Create/edit treasures, challenges, meeting points
 - View personal stats and achievements
@@ -193,12 +214,14 @@ Web Dashboard
 #### PostgreSQL with PostGIS
 
 **Why PostGIS?**
+
 - Efficient spatial queries (ST_DWithin for proximity)
 - Spatial indexing (GIST index)
 - Built-in distance calculations
 - Proven performance for location-based apps
 
 **Key Tables:**
+
 - `users` - User accounts
 - `game_entities` - All game objects (polymorphic)
 - `user_collections` - Collection history
@@ -207,6 +230,7 @@ Web Dashboard
 - `sessions` - Active user sessions
 
 **Spatial Queries Example:**
+
 ```sql
 -- Find all treasures within 100m of user
 SELECT * FROM game_entities
@@ -222,6 +246,7 @@ WHERE type = 'treasure'
 #### Redis
 
 **Use Cases:**
+
 - Session storage
 - Leaderboard caching (sorted sets)
 - Rate limiting
@@ -231,6 +256,7 @@ WHERE type = 'treasure'
 ### 5. API Gateway
 
 **Responsibilities:**
+
 - Request routing
 - Authentication/authorization (JWT)
 - Rate limiting
@@ -240,6 +266,7 @@ WHERE type = 'treasure'
 - WebSocket upgrade handling
 
 **Middleware Stack:**
+
 ```javascript
 Express App
 ├── CORS
@@ -327,6 +354,7 @@ Keychain and Zustand state locally even if the network revoke fails.
 ## Scalability Considerations
 
 ### Current MVP Architecture
+
 - Single Node.js instance
 - Single PostgreSQL instance
 - Single Redis instance
@@ -335,21 +363,25 @@ Keychain and Zustand state locally even if the network revoke fails.
 ### Future Scaling Path
 
 **Horizontal Scaling:**
+
 - Load balancer (NGINX/AWS ALB)
 - Multiple Node.js instances
 - Sticky sessions for WebSocket (Redis adapter)
 
 **Database Scaling:**
+
 - Read replicas for leaderboard queries
 - Partition game_entities by geography
 - Separate analytics database
 
 **Caching Strategy:**
+
 - Redis cluster for session distribution
 - CDN for static assets (map tiles, images)
 - API response caching (short TTL)
 
 **Geospatial Optimization:**
+
 - Spatial partitioning (e.g., by city)
 - Entity clustering for distant zoom levels
 - Viewport-based entity loading
@@ -357,23 +389,27 @@ Keychain and Zustand state locally even if the network revoke fails.
 ## Security Architecture
 
 ### Authentication
+
 - JWT tokens (access token + refresh token pattern)
 - Tokens stored in secure storage (Keychain/Keystore)
 - Short expiration (15 min access, 7 day refresh)
 
 ### Movement Validation
+
 - Server-side validation of all movement data
 - Anomaly detection for impossible speeds
 - Rate limiting on collection endpoints
 - Geofencing for valid play areas
 
 ### Data Privacy
+
 - User location stored only when actively playing
 - Historical location data aggregated/anonymized
 - GDPR compliance (data export, deletion)
 - Encrypted data at rest
 
 ### API Security
+
 - Rate limiting (per IP and per user)
 - Input validation (Joi/Zod schemas)
 - SQL injection prevention (Prisma ORM)
@@ -392,6 +428,7 @@ Keychain and Zustand state locally even if the network revoke fails.
 ## Monitoring & Observability
 
 ### Metrics to Track
+
 - API response times
 - Movement detection accuracy
 - Collection success rate
@@ -401,6 +438,7 @@ Keychain and Zustand state locally even if the network revoke fails.
 - Crash rates (mobile)
 
 ### Tools
+
 - Backend: Winston (logging) + Prometheus (metrics)
 - Mobile: Sentry (crash reporting)
 - Database: pg_stat_statements
@@ -408,16 +446,16 @@ Keychain and Zustand state locally even if the network revoke fails.
 
 ## Technology Choices Rationale
 
-| Technology | Why Chosen | Alternatives Considered |
-|------------|-----------|------------------------|
-| React Native | Single codebase, fast iteration | Flutter (less mature ecosystem) |
-| Mapbox | Style customization, gaming-friendly | Google Maps (limited styling) |
-| PostgreSQL | Mature, PostGIS for geospatial | MongoDB (less efficient spatial queries) |
-| Express | Simple, well-documented | NestJS (overkill for MVP) |
-| Socket.io | Easy WebSockets, fallback support | Native WebSockets (more code) |
-| Prisma | Type-safe ORM, great DX | TypeORM (less type safety) |
-| Zustand | Lightweight state management | Redux (too much boilerplate) |
-| React Query | Built-in caching, mutations | SWR (less feature-complete) |
+| Technology   | Why Chosen                           | Alternatives Considered                  |
+| ------------ | ------------------------------------ | ---------------------------------------- |
+| React Native | Single codebase, fast iteration      | Flutter (less mature ecosystem)          |
+| Mapbox       | Style customization, gaming-friendly | Google Maps (limited styling)            |
+| PostgreSQL   | Mature, PostGIS for geospatial       | MongoDB (less efficient spatial queries) |
+| Express      | Simple, well-documented              | NestJS (overkill for MVP)                |
+| Socket.io    | Easy WebSockets, fallback support    | Native WebSockets (more code)            |
+| Prisma       | Type-safe ORM, great DX              | TypeORM (less type safety)               |
+| Zustand      | Lightweight state management         | Redux (too much boilerplate)             |
+| React Query  | Built-in caching, mutations          | SWR (less feature-complete)              |
 
 ## Development Principles
 

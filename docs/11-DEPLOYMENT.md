@@ -1,5 +1,10 @@
 # Deployment Guide
 
+> Status note, 2026-04-27: this is a future production deployment reference.
+> The current backend deployment path is Railway; use `14-DEPLOY-RAILWAY.md`.
+> The web dashboard and mobile store distribution sections are not current
+> implementation steps.
+
 ## Overview
 
 Production deployment strategy for the walking game MVP. Covers backend API, web dashboard, and mobile app distribution.
@@ -55,7 +60,7 @@ Create `.ebextensions/nodecommand.config`:
 ```yaml
 option_settings:
   aws:elasticbeanstalk:container:nodejs:
-    NodeCommand: "node dist/server.js"
+    NodeCommand: 'node dist/server.js'
     NodeVersion: 18.x
   aws:elasticbeanstalk:application:environment:
     NODE_ENV: production
@@ -470,9 +475,11 @@ appcenter codepush release-react \
 // backend/src/app.ts
 import { datadogMiddleware } from '@datadog/dd-trace';
 
-app.use(datadogMiddleware({
-  analytics: true,
-}));
+app.use(
+  datadogMiddleware({
+    analytics: true,
+  }),
+);
 ```
 
 ### Error Tracking (Sentry)
@@ -534,24 +541,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
-      
+
       - name: Deploy to Elastic Beanstalk
         run: |
           cd backend
           eb deploy production
-  
+
   deploy-web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         with:
@@ -623,6 +630,7 @@ aws rds restore-db-instance-from-db-snapshot \
 ## Cost Estimation (MVP)
 
 **AWS (Monthly)**:
+
 - ECS Fargate (2 tasks): ~$30
 - RDS t3.micro: ~$15
 - ElastiCache t3.micro: ~$12
@@ -631,11 +639,13 @@ aws rds restore-db-instance-from-db-snapshot \
 - **Total**: ~$87/month
 
 **Other Services**:
+
 - Mapbox: Free tier (50k loads)
 - Vercel: Free tier
 - Sentry: Free tier
 
 **Mobile Distribution**:
+
 - Apple Developer: $99/year
 - Google Play: $25 one-time
 

@@ -42,9 +42,12 @@ cd mobile && npm start
   before clearing local auth state. If the network revoke fails, local
   credentials are still cleared.
 - Map collection uses live GPS distance plus capped horizontal accuracy,
-  matching the backend uncertainty-aware collect gate. Temporary local
-  debug transport has been removed; the visible overlay remains the field
-  diagnostic surface for the first-walk loop.
+  matching the backend uncertainty-aware collect gate.
+- When the user pans the map and their location leaves the visible viewport, a
+  lower-right recenter button appears and flies the camera back to the latest
+  GPS fix.
+- The map has no debug overlay right now. Verify field-test behavior with
+  collect alerts, Railway logs, and database rows.
 
 ## Phase 1 deliberate limits
 
@@ -53,6 +56,7 @@ cd mobile && npm start
 - Activity recognition from iOS CMMotionActivity is not wired up in Phase 1;
   `MovementSample.activity` is reported as UNKNOWN and the server still
   correctly rejects bad samples via speed + accelerometer + teleport checks.
-  Wiring CMMotionActivity into a native module is a Phase 2 task.
+  Native `CMPedometer` plus optional HealthKit is the next Alpha P0 motion
+  milestone.
 - No app-level error boundary UI yet — Metro and Sentry cover dev; Phase 2
   adds a production error boundary.

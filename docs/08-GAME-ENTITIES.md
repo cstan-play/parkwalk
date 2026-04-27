@@ -2,7 +2,11 @@
 
 ## Overview
 
-The game entities system is designed for **maximum extensibility**. It uses a **plugin architecture** that allows adding new entity types without modifying core code.
+The game entities system is designed for extensibility, but the Phase 1
+implementation is intentionally narrower: shared collectible rows in
+`game_entities`, collected through one server-side collect transaction. The
+plugin-style entity architecture below is the direction for future entity
+types, not a framework that exists in code today.
 
 ## Placement Model
 
@@ -51,13 +55,13 @@ delete existing entities. Placement metadata is stored under:
 
 Config knobs:
 
-| Env var | Purpose |
-| --- | --- |
-| `NEARBY_AUTO_SEED_ENABLED` | Enables `/nearby` top-up behavior. Keep false in production until spawn policy is finalized. |
-| `NEARBY_AUTO_SEED_TARGET_COUNT` | Number of visible uncollected collectibles to maintain around the queried location. |
-| `NEARBY_AUTO_SEED_RADIUS_METERS` | Max scatter radius around the user/query point. |
-| `NEARBY_AUTO_SEED_MIN_DISTANCE_METERS` | Avoids spawning directly on top of the user. |
-| `NEARBY_AUTO_SEED_MIN_SPACING_METERS` | Avoids overlapping markers / collection radii. |
+| Env var                                | Purpose                                                                                      |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `NEARBY_AUTO_SEED_ENABLED`             | Enables `/nearby` top-up behavior. Keep false in production until spawn policy is finalized. |
+| `NEARBY_AUTO_SEED_TARGET_COUNT`        | Number of visible uncollected collectibles to maintain around the queried location.          |
+| `NEARBY_AUTO_SEED_RADIUS_METERS`       | Max scatter radius around the user/query point.                                              |
+| `NEARBY_AUTO_SEED_MIN_DISTANCE_METERS` | Avoids spawning directly on top of the user.                                                 |
+| `NEARBY_AUTO_SEED_MIN_SPACING_METERS`  | Avoids overlapping markers / collection radii.                                               |
 
 ### Future placement contexts
 
@@ -77,13 +81,16 @@ idempotency, and duplicate-collection rules apply.
 
 ## Entity Types
 
-### Current Types (MVP)
-- **Treasure**: User-placed items others can find
-- **Collectible**: Fixed spawn points (respawn after collection)
-- **Challenge**: Tasks with specific requirements
-- **Meeting Point**: Locations for social gatherings
+### Current Types
 
-### Future Types (Post-MVP)
+- **Collectible**: fixed/shared spawn points collected once per user. This is
+  the only entity type exercised by the current first-walk loop.
+
+### Future Types
+
+- Treasure: user-placed items others can find.
+- Challenge: tasks with specific requirements.
+- Meeting Point: locations for social gatherings.
 - Quest chains
 - Timed events
 - Team challenges
@@ -99,13 +106,13 @@ All entities stored in single `game_entities` table (see `02-DATABASE-SCHEMA.md`
 ```typescript
 interface GameEntity {
   id: string;
-  type: string;                    // Entity type identifier
+  type: string; // Entity type identifier
   creator_id: string | null;
-  location: Geography;             // PostGIS point
+  location: Geography; // PostGIS point
   active: boolean;
   visible_from: Date;
   visible_until: Date | null;
-  config: Record<string, any>;     // Type-specific data
+  config: Record<string, any>; // Type-specific data
   collection_radius_meters: number;
   max_collections: number | null;
   current_collections: number;
@@ -123,20 +130,20 @@ Each entity type is a plugin with standardized interface:
 interface IEntityPlugin {
   // Type identifier
   type: string;
-  
+
   // Validation
   validateConfig(config: any): ValidationResult;
-  
+
   // Collection rules
   canCollect(user: User, entity: GameEntity): boolean;
   onCollect(user: User, entity: GameEntity): CollectionResult;
-  
+
   // Spawning (for auto-spawned entities)
   shouldSpawn?(location: Location): boolean;
-  
+
   // Respawn logic (for collectibles)
   shouldRespawn?(entity: GameEntity): boolean;
-  
+
   // UI rendering
   getMarkerConfig(): MarkerConfig;
   getDetailView(): React.ComponentType<{ entity: GameEntity }>;
@@ -150,7 +157,7 @@ interface IEntityPlugin {
 ```typescript
 class TreasurePlugin implements IEntityPlugin {
   type = 'treasure';
-  
+
   validateConfig(config: any): ValidationResult {
     const schema = z.object({
       name: z.string().min(3).max(50),
@@ -160,7 +167,7 @@ class TreasurePlugin implements IEntityPlugin {
       hint: z.string().max(100).optional(),
       image_url: z.string().url().optional(),
     });
-    
+
     try {
       schema.parse(config);
       return { valid: true };
@@ -168,46 +175,47 @@ class TreasurePlugin implements IEntityPlugin {
       return { valid: false, errors: error.errors };
     }
   }
-  
+
   canCollect(user: User, entity: GameEntity): boolean {
     // Cannot collect your own treasure
     if (entity.creator_id === user.id) {
       return false;
     }
-    
+
     // Check if already collected
     const hasCollected = await this.checkCollectionHistory(user.id, entity.id);
     return !hasCollected;
   }
-  
+
   async onCollect(user: User, entity: GameEntity): Promise<CollectionResult> {
     const points = entity.config.points || 50;
-    
+
     // Award points based on rarity
-    const rarityMultiplier = {
-      common: 1.0,
-      rare: 1.5,
-      legendary: 2.0,
-    }[entity.config.rarity] || 1.0;
-    
+    const rarityMultiplier =
+      {
+        common: 1.0,
+        rare: 1.5,
+        legendary: 2.0,
+      }[entity.config.rarity] || 1.0;
+
     const finalPoints = Math.round(points * rarityMultiplier);
-    
+
     // Update creator stats (they get partial credit)
     await this.updateCreatorStats(entity.creator_id, {
       treasures_found_by_others: +1,
     });
-    
+
     return {
       success: true,
       points_earned: finalPoints,
       rewards: {
         achievement: this.checkForAchievements(user, entity),
       },
-      should_deactivate: entity.max_collections !== null && 
-                         entity.current_collections + 1 >= entity.max_collections,
+      should_deactivate:
+        entity.max_collections !== null && entity.current_collections + 1 >= entity.max_collections,
     };
   }
-  
+
   getMarkerConfig(): MarkerConfig {
     return {
       icon: '💎',
@@ -215,21 +223,21 @@ class TreasurePlugin implements IEntityPlugin {
       size: 'medium',
     };
   }
-  
+
   getDetailView() {
     return TreasureDetailView;
   }
-  
+
   private checkForAchievements(user: User, entity: GameEntity): string[] {
     const achievements = [];
-    
+
     // First legendary treasure
     if (entity.config.rarity === 'legendary') {
       if (user.stats.legendary_treasures === 0) {
         achievements.push('first_legendary');
       }
     }
-    
+
     return achievements;
   }
 }
@@ -240,7 +248,7 @@ class TreasurePlugin implements IEntityPlugin {
 ```typescript
 class CollectiblePlugin implements IEntityPlugin {
   type = 'collectible';
-  
+
   validateConfig(config: any): ValidationResult {
     const schema = z.object({
       name: z.string(),
@@ -249,7 +257,7 @@ class CollectiblePlugin implements IEntityPlugin {
       respawn_seconds: z.number().min(60),
       spawn_probability: z.number().min(0).max(1).optional(),
     });
-    
+
     try {
       schema.parse(config);
       return { valid: true };
@@ -257,21 +265,21 @@ class CollectiblePlugin implements IEntityPlugin {
       return { valid: false, errors: error.errors };
     }
   }
-  
+
   canCollect(user: User, entity: GameEntity): boolean {
     // Collectibles can be collected multiple times
     // But check cooldown
     const lastCollection = await this.getLastCollection(user.id, entity.id);
-    
+
     if (lastCollection) {
       const cooldownMs = entity.config.respawn_seconds * 1000;
       const timeSince = Date.now() - lastCollection.collected_at.getTime();
       return timeSince >= cooldownMs;
     }
-    
+
     return true;
   }
-  
+
   async onCollect(user: User, entity: GameEntity): Promise<CollectionResult> {
     return {
       success: true,
@@ -280,18 +288,18 @@ class CollectiblePlugin implements IEntityPlugin {
       should_deactivate: false, // Never deactivate
     };
   }
-  
+
   shouldRespawn(entity: GameEntity): boolean {
     // Check if enough time has passed since last collection
     const lastCollectionTime = entity.config.last_respawn_at;
     if (!lastCollectionTime) return false;
-    
-    const respawnTime = new Date(lastCollectionTime).getTime() + 
-                       (entity.config.respawn_seconds * 1000);
-    
+
+    const respawnTime =
+      new Date(lastCollectionTime).getTime() + entity.config.respawn_seconds * 1000;
+
     return Date.now() >= respawnTime;
   }
-  
+
   getMarkerConfig(): MarkerConfig {
     return {
       icon: '⭐',
@@ -299,7 +307,7 @@ class CollectiblePlugin implements IEntityPlugin {
       size: 'small',
     };
   }
-  
+
   getDetailView() {
     return CollectibleDetailView;
   }
@@ -311,7 +319,7 @@ class CollectiblePlugin implements IEntityPlugin {
 ```typescript
 class ChallengePlugin implements IEntityPlugin {
   type = 'challenge';
-  
+
   validateConfig(config: any): ValidationResult {
     const schema = z.object({
       name: z.string(),
@@ -329,7 +337,7 @@ class ChallengePlugin implements IEntityPlugin {
       }),
       difficulty: z.enum(['easy', 'medium', 'hard']),
     });
-    
+
     try {
       schema.parse(config);
       return { valid: true };
@@ -337,16 +345,16 @@ class ChallengePlugin implements IEntityPlugin {
       return { valid: false, errors: error.errors };
     }
   }
-  
+
   canCollect(user: User, entity: GameEntity): boolean {
     // Check if user has already completed this challenge
     return !this.hasCompleted(user.id, entity.id);
   }
-  
+
   async onCollect(user: User, entity: GameEntity): Promise<CollectionResult> {
     // "Collecting" a challenge means accepting/starting it
     await this.startChallenge(user.id, entity.id);
-    
+
     return {
       success: true,
       points_earned: 0, // Points awarded on completion
@@ -354,12 +362,12 @@ class ChallengePlugin implements IEntityPlugin {
       should_deactivate: false,
     };
   }
-  
+
   // Challenge-specific: Check progress
   async checkProgress(user: User, entity: GameEntity): Promise<ChallengeProgress> {
     const config = entity.config;
     const userProgress = await this.getUserChallengeProgress(user.id, entity.id);
-    
+
     switch (config.challenge_type) {
       case 'distance_time':
         const distanceCovered = userProgress.distance_meters || 0;
@@ -372,7 +380,7 @@ class ChallengePlugin implements IEntityPlugin {
             target: target,
           },
         };
-      
+
       case 'collection_count':
         const collected = userProgress.collections || 0;
         const targetCount = config.requirements.target_collections;
@@ -384,12 +392,12 @@ class ChallengePlugin implements IEntityPlugin {
             target: targetCount,
           },
         };
-      
+
       default:
         return { completed: false, progress: 0 };
     }
   }
-  
+
   getMarkerConfig(): MarkerConfig {
     return {
       icon: '🏆',
@@ -397,7 +405,7 @@ class ChallengePlugin implements IEntityPlugin {
       size: 'large',
     };
   }
-  
+
   getDetailView() {
     return ChallengeDetailView;
   }
@@ -409,7 +417,7 @@ class ChallengePlugin implements IEntityPlugin {
 ```typescript
 class MeetingPointPlugin implements IEntityPlugin {
   type = 'meeting_point';
-  
+
   validateConfig(config: any): ValidationResult {
     const schema = z.object({
       name: z.string(),
@@ -418,7 +426,7 @@ class MeetingPointPlugin implements IEntityPlugin {
       max_participants: z.number().min(2),
       organizer: z.string(),
     });
-    
+
     try {
       schema.parse(config);
       return { valid: true };
@@ -426,23 +434,23 @@ class MeetingPointPlugin implements IEntityPlugin {
       return { valid: false, errors: error.errors };
     }
   }
-  
+
   canCollect(user: User, entity: GameEntity): boolean {
     // Check if event hasn't happened yet
     const eventTime = new Date(entity.config.event_time);
     if (eventTime < new Date()) {
       return false;
     }
-    
+
     // Check if not full
     const participants = this.getParticipants(entity.id);
     return participants.length < entity.config.max_participants;
   }
-  
+
   async onCollect(user: User, entity: GameEntity): Promise<CollectionResult> {
     // "Collecting" means joining the event
     await this.addParticipant(user.id, entity.id);
-    
+
     return {
       success: true,
       points_earned: 0, // Points awarded on attendance
@@ -450,7 +458,7 @@ class MeetingPointPlugin implements IEntityPlugin {
       should_deactivate: false,
     };
   }
-  
+
   getMarkerConfig(): MarkerConfig {
     return {
       icon: '📍',
@@ -458,7 +466,7 @@ class MeetingPointPlugin implements IEntityPlugin {
       size: 'medium',
     };
   }
-  
+
   getDetailView() {
     return MeetingPointDetailView;
   }
@@ -472,28 +480,28 @@ Centralized registry for managing plugins:
 ```typescript
 class EntityPluginRegistry {
   private plugins: Map<string, IEntityPlugin> = new Map();
-  
+
   register(plugin: IEntityPlugin): void {
     this.plugins.set(plugin.type, plugin);
   }
-  
+
   get(type: string): IEntityPlugin | null {
     return this.plugins.get(type) || null;
   }
-  
+
   getAllTypes(): string[] {
     return Array.from(this.plugins.keys());
   }
-  
+
   // Initialize with default plugins
   static initialize(): EntityPluginRegistry {
     const registry = new EntityPluginRegistry();
-    
+
     registry.register(new TreasurePlugin());
     registry.register(new CollectiblePlugin());
     registry.register(new ChallengePlugin());
     registry.register(new MeetingPointPlugin());
-    
+
     return registry;
   }
 }
@@ -509,30 +517,30 @@ class GameEntityService {
   async collectEntity(
     userId: string,
     entityId: string,
-    movementData: MovementData
+    movementData: MovementData,
   ): Promise<CollectionResult> {
     const entity = await this.findById(entityId);
     const user = await this.userService.findById(userId);
     const plugin = entityRegistry.get(entity.type);
-    
+
     if (!plugin) {
       throw new Error(`Unknown entity type: ${entity.type}`);
     }
-    
+
     // Validate movement
     const movementValid = await this.movementService.validate(movementData);
     if (!movementValid) {
       throw new Error('Movement validation failed');
     }
-    
+
     // Check if can collect
     if (!plugin.canCollect(user, entity)) {
       throw new Error('Cannot collect this entity');
     }
-    
+
     // Perform collection
     const result = await plugin.onCollect(user, entity);
-    
+
     // Update database
     await this.createCollection({
       user_id: userId,
@@ -540,37 +548,34 @@ class GameEntityService {
       points_earned: result.points_earned,
       movement_validated: true,
     });
-    
+
     // Update stats
     await this.userService.updateStats(userId, {
       total_collections: +1,
       daily_score: +result.points_earned,
     });
-    
+
     // Deactivate if needed
     if (result.should_deactivate) {
       await this.deactivateEntity(entityId);
     }
-    
+
     return result;
   }
-  
-  async createEntity(
-    type: string,
-    data: CreateEntityInput
-  ): Promise<GameEntity> {
+
+  async createEntity(type: string, data: CreateEntityInput): Promise<GameEntity> {
     const plugin = entityRegistry.get(type);
-    
+
     if (!plugin) {
       throw new Error(`Unknown entity type: ${type}`);
     }
-    
+
     // Validate config
     const validation = plugin.validateConfig(data.config);
     if (!validation.valid) {
       throw new ValidationError(validation.errors);
     }
-    
+
     // Create entity
     return await this.db.gameEntity.create({
       data: {
@@ -594,13 +599,23 @@ To add a new entity type:
 ```typescript
 class QuestChainPlugin implements IEntityPlugin {
   type = 'quest_chain';
-  
+
   // Implement all required methods
-  validateConfig(config: any): ValidationResult { /* ... */ }
-  canCollect(user: User, entity: GameEntity): boolean { /* ... */ }
-  onCollect(user: User, entity: GameEntity): Promise<CollectionResult> { /* ... */ }
-  getMarkerConfig(): MarkerConfig { /* ... */ }
-  getDetailView() { return QuestChainDetailView; }
+  validateConfig(config: any): ValidationResult {
+    /* ... */
+  }
+  canCollect(user: User, entity: GameEntity): boolean {
+    /* ... */
+  }
+  onCollect(user: User, entity: GameEntity): Promise<CollectionResult> {
+    /* ... */
+  }
+  getMarkerConfig(): MarkerConfig {
+    /* ... */
+  }
+  getDetailView() {
+    return QuestChainDetailView;
+  }
 }
 ```
 

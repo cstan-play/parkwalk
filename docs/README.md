@@ -21,62 +21,74 @@ A cross-platform location-based social walking game where users collect items, h
 >    auth refresh, friends graph, leaderboards, web dashboard — built on top
 >    of the same kernel.
 
-### Phase 1 — walk-loop kernel (in progress)
-- **Movement Detection**: genuine walking validation via GPS + accelerometer
-  + activity recognition, server-side double-check.
-- **Collectibles System**: fixed spawn points with Poisson-disc seeding
-  (no overlapping collection radii), user-placed treasures.
-- **Custom Map**: Mapbox Streets today, custom style imminent.
-- **Auth**: JWT access + refresh tokens, keychain-backed login, silent
-  refresh on 401, and explicit sign-out that revokes the refresh session
-  server-side before clearing Keychain/Zustand state.
+### Current status
 
-### Phase 1 — Alpha product features (scheduled, not "deferred")
-- **Offline map tiles** — Mapbox OfflineManager so a dropped cellular
-  signal doesn't blank the map mid-walk.
-- **Walkable-way snapping** — seed script snaps random candidates to the
-  nearest OSM footway/sidewalk/path so markers land on terrain a player can
-  actually reach.
-- **Friends graph + activity feed** — infrastructure in the schema today,
-  surfaced before end-users see the app.
-- **Leaderboards** — daily/weekly/all-time scores (already tracked in
-  `UserStats`).
-- **Web dashboard** — map management, moderation, stats, activity feed.
+The living project handoff is `00-CURRENT-STATUS.md`.
 
-### Phase 2 — post-Alpha
-- Android build (iOS-first during Alpha; schema + shared pkg are already
-  cross-platform).
-- Remote push via FCM for social/global alerts.
-- Socket.io real-time leaderboard (polling works for Alpha).
+ParkWalk is currently in the **Phase 1 first-walk loop**: backend, iOS app,
+hosted Railway API, auth, nearby collectibles, collect idempotency, movement
+validation, and stats are implemented enough for a real iPhone walk test.
+
+### Phase 1 P0 — finish the walk proof
+
+- Verify Railway `/health` and `/ready`.
+- Seed nearby collectibles with `NEARBY_AUTO_SEED_ENABLED=true` or the manual
+  seed script.
+- Complete one clean outdoor collect from the iPhone app.
+- Verify stats and `user_collections` in the database.
+- Save a real walking fixture for regression tests.
+
+### Alpha P0 — native motion reliability
+
+- Add native iOS `CMPedometer` step backfill/streaming.
+- Optionally read HealthKit step count and walking/running distance.
+- Keep the JS accelerometer step detector as fallback.
+- Revisit soft flags once native steps are reliable.
+
+### Alpha P1/P2 — product hardening
+
+- Offline map tiles.
+- Walkable-way snapping for seeded entities.
+- Friends graph, activity feed, leaderboards.
+- Web dashboard for map management, moderation, stats, and activity review.
+
+### Phase 2 — broader platform
+
+- Android build.
+- Paid Apple Developer/TestFlight/external testers.
+- Remote push notifications.
+- Real-time WebSocket features if polling is no longer enough.
 - Challenges + events engine.
 
 ## Platform Support
 
-- **iOS**: Native app (React Native)
-- **Android**: Native app (React Native)
-- **Web**: Dashboard for map management and stats
+- **iOS**: Native app (React Native), current focus.
+- **Android**: Planned after Alpha.
+- **Web**: Dashboard planned after the walk loop is proven.
 
 ## Tech Stack Summary
 
-### Mobile (iOS/Android)
+### Mobile
+
 - React Native 0.73+
 - Mapbox Maps SDK (@rnmapbox/maps)
-- Sensor integration (GPS, accelerometer, activity recognition)
+- Sensor integration (GPS + JS accelerometer today; native pedometer next)
 - Zustand (state management)
 - React Query (API & caching)
 
 ### Backend
+
 - Node.js + TypeScript
 - Express (REST API)
-- Socket.io (real-time updates)
 - PostgreSQL 15+ with PostGIS
 - Redis (caching & sessions)
 - Prisma ORM
 
-### Web Dashboard
+### Planned Web Dashboard
+
 - React + TypeScript
 - Mapbox GL JS
-- Socket.io client
+- WebSocket client if real-time features are needed
 - Recharts (analytics)
 - Tailwind CSS
 
@@ -85,59 +97,56 @@ A cross-platform location-based social walking game where users collect items, h
 ```
 docs/
 ├── README.md (this file)
-├── 01-ARCHITECTURE.md          # System architecture & design decisions
-├── 02-DATABASE-SCHEMA.md       # Database design & PostGIS setup
-├── 03-API-SPECIFICATION.md     # REST API & WebSocket contracts
-├── 04-SETUP-BACKEND.md         # Backend setup guide
-├── 05-SETUP-MOBILE.md          # React Native setup guide
-├── 06-SETUP-WEB.md             # Web dashboard setup guide
+├── 00-CURRENT-STATUS.md        # Living handoff + next phases
+├── 01-ARCHITECTURE.md          # Architecture direction; marks planned areas
+├── 02-DATABASE-SCHEMA.md       # Schema design; Prisma is source of truth
+├── 03-API-SPECIFICATION.md     # REST contract notes; routers are source of truth
+├── 04-SETUP-BACKEND.md         # Historical scaffold + local backend notes
+├── 05-SETUP-MOBILE.md          # Historical mobile architecture sketch
+├── 06-SETUP-WEB.md             # Future dashboard sketch
 ├── 07-MOVEMENT-DETECTION.md    # Movement validation algorithm
-├── 08-GAME-ENTITIES.md         # Collectibles, treasures, challenges system
-├── 09-MAPBOX-INTEGRATION.md    # Custom map styling & implementation
+├── 08-GAME-ENTITIES.md         # Placement and entity system
+├── 09-MAPBOX-INTEGRATION.md    # Mapbox style/offline-map planning
 ├── 10-TESTING-STRATEGY.md      # Testing approach & tools
-├── 11-DEPLOYMENT.md            # Production deployment guide
+├── 11-DEPLOYMENT.md            # Future production deployment reference
 ├── 12-FIRST-WALK.md            # First end-to-end walk checklist
-├── 13-BOOTSTRAP-IOS.md         # iOS bootstrap log + Alpha follow-ups
+├── 13-BOOTSTRAP-IOS.md         # iOS bootstrap + field-test retros
 └── 14-DEPLOY-RAILWAY.md        # Railway deploy (monorepo + PostGIS)
 ```
 
 ## Quick Start (Development)
 
 ### Prerequisites
-- Node.js 18+
-- PostgreSQL 15+ with PostGIS extension
-- Redis 7+
-- Xcode (for iOS development)
-- Android Studio (for Android development)
-- Mapbox account (free tier)
 
-### 1. Clone & Setup Backend
+- Node.js 20+ and npm 10+
+- Xcode and an iPhone for the current iOS loop
+- Mapbox `pk.*` runtime token and `sk.*` downloads token
+- Hosted Railway backend URL
+- Docker Desktop only for local backend integration tests
+
+### 1. Install dependencies
+
 ```bash
-cd backend
 npm install
-cp .env.example .env
-# Configure .env with database credentials
-npm run migrate
-npm run dev
 ```
 
-### 2. Setup Mobile App
+### 2. Verify or deploy backend
+
+Use `14-DEPLOY-RAILWAY.md`, then verify:
+
+```bash
+curl https://<railway-url>/health
+curl https://<railway-url>/ready
+```
+
+### 3. Setup mobile app
+
 ```bash
 cd mobile
-npm install
-# iOS
+cp .env.example .env
+# Set MAPBOX_ACCESS_TOKEN=pk...
 cd ios && pod install && cd ..
-npm run ios
-
-# Android
-npm run android
-```
-
-### 3. Setup Web Dashboard
-```bash
-cd web
-npm install
-npm run dev
+# Open ios/ParkWalk.xcworkspace in Xcode and run on device.
 ```
 
 ## Development Workflow
@@ -152,37 +161,41 @@ npm run dev
 
 ## MVP + Alpha Development Timeline
 
-- **Week 1-2**: Backend infrastructure + movement detection (DONE)
-- **Week 3-4**: Mobile app core + Mapbox integration + iOS bootstrap (DONE,
-  see `13-BOOTSTRAP-IOS.md`)
-- **Week 5-6**: Game entity system + collection mechanics + first end-to-end
-  walk (IN PROGRESS)
-- **Week 7**: Offline tiles, walkable-way snapping, auth refresh + logout
-- **Week 8**: Friends graph + activity feed + leaderboards
-- **Week 9**: Web dashboard (map management, moderation, stats)
-- **Week 10**: Alpha hardening — tests, observability, deployment guide
+- **Done**: backend infrastructure, shared schemas, iOS bootstrap, hosted API
+  default, auth refresh/logout, nearby auto-seeding, collect idempotency,
+  movement soft-flag validation, and first field-test fixes.
+- **Now**: clean first-walk proof with no debug overlay, DB verification, and a
+  saved real walking fixture.
+- **Next**: native pedometer/HealthKit, walkable-way snapping, offline tiles.
+- **Later Alpha**: friends/activity, leaderboards, web dashboard, hardening.
+- **Phase 2**: Android, external distribution, push, real-time features,
+  challenges/events.
 
 ## Key Decisions & Rationale
 
 ### Why React Native?
+
 - Single codebase for iOS/Android (70-80% code sharing)
 - Good sensor access via native modules
 - Fast iteration for MVP
 - Can optimize with native code later if needed
 
 ### Why Mapbox?
+
 - Complete style customization (game-like aesthetics)
 - Excellent mobile performance
 - Used by similar apps (Pokémon GO, Strava)
 - Free tier sufficient for MVP (50k map loads/month)
 
 ### Why PostgreSQL + PostGIS?
+
 - PostGIS provides efficient geospatial queries
 - Critical for "find nearby treasures" functionality
 - Better than NoSQL for complex spatial relationships
 - Mature ecosystem
 
 ### Why Movement Detection Focus?
+
 - Core differentiator from simple map apps
 - Prevents cheating (driving to collect items)
 - Enables fair leaderboards
@@ -190,10 +203,10 @@ npm run dev
 
 ## Next Steps
 
-1. Read `01-ARCHITECTURE.md` for system design overview
-2. Follow `04-SETUP-BACKEND.md` to start development
-3. Review `07-MOVEMENT-DETECTION.md` for core algorithm
-4. Check `03-API-SPECIFICATION.md` for endpoint contracts
+1. Read `00-CURRENT-STATUS.md` for the current handoff.
+2. Follow `12-FIRST-WALK.md` for the next field test.
+3. Review `07-MOVEMENT-DETECTION.md` before changing validation.
+4. Use `14-DEPLOY-RAILWAY.md` for hosted backend work.
 
 ## Support & Resources
 

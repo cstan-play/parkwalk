@@ -4,13 +4,15 @@
 > This doc records the iOS-bootstrap slice of Phase 1; "deferred" items below
 > are now in-scope for the Alpha timeline (weeks 7–10), not post-launch wishes.
 
-**Goal of this sprint**: take the existing React Native / TypeScript source
-(committed before this sprint) and get a signed build running on a real iPhone.
-This does not include the backend; the mobile app can launch, render the
-Onboarding screen, and request iOS permissions, but cannot log in yet.
+**Initial goal of this sprint**: take the existing React Native / TypeScript
+source (committed before this sprint) and get a signed build running on a real
+iPhone. That bootstrap goal has since expanded through field-test follow-ups:
+hosted login, MapScreen, marker collection, and movement validation are now
+wired against Railway.
 
-**Timeline**: April 2026, single session.
-**Branch**: `bootstrap/ios` (not yet merged to `main`).
+**Timeline**: April 2026, initial bootstrap plus field-test follow-ups.
+**Branch history**: started on `bootstrap/ios`; the relevant work is now on
+`main`.
 **Toolchain discovered on the dev Mac**: Xcode 26.4.1, iOS 26.4 SDK,
 CocoaPods 1.16.2, Node 20.20.2 (via nvm), React Native 0.73.11.
 
@@ -26,19 +28,19 @@ CocoaPods 1.16.2, Node 20.20.2 (via nvm), React Native 0.73.11.
 
 ## What actually happened
 
-The above sequence is essentially correct, but six issues surfaced that the
+The above sequence is essentially correct, but seven issues surfaced that the
 original SETUP.md did not predict. Each one was a separate "Command
 PhaseScriptExecution failed" or a crash at first JS execution.
 
-| # | Issue | Root cause | Fix |
-|---|---|---|---|
-| 1 | `react-native init` deleted committed files in `mobile/` | The CLI overwrites TS files silently when run in a non-empty directory | `git checkout HEAD -- mobile/`; kept the generated native-only files |
-| 2 | `pod install` failed: `cannot load '@rnmapbox/maps/scripts/install'` | In `rnmapbox-maps@10.1.30` that script no longer exists; `$RNMapboxMaps` is defined by the podspec itself. Also `$RNMapboxMapsDownloadToken = ''` (truthy) broke `~/.netrc` auth | Podfile calls `$RNMapboxMaps.pre_install(installer)` and `.post_install(installer)` inside the hook blocks; removed the bogus download-token line |
-| 3 | Build failed: `../node_modules/react-native/scripts/xcode/with-environment.sh: No such file or directory` | RN-CLI's "Bundle React Native code and images" script uses `../node_modules/`, which is `mobile/node_modules/` — missing because npm workspaces hoisted to repo root | Changed the script phase in `project.pbxproj` to `../../node_modules/` |
-| 4 | Linker spam about "built for newer iOS-simulator (14.0) than linked (13.4)" | Main target's `IPHONEOS_DEPLOYMENT_TARGET` was 13.4 (RN 0.73 default) but the Podfile forced all pods to 14.0 for Mapbox + rnmapbox | Set main-target deployment target to 14.0 (4 occurrences in `project.pbxproj`) |
-| 5 | Metro crashed: `Cannot find module 'babel-plugin-module-resolver'` | `mobile/babel.config.js` uses the plugin to resolve `@/*` path aliases but it was never declared in `mobile/package.json` | `npm install --workspace=mobile --save-dev babel-plugin-module-resolver` |
-| 6 | Metro crashed: `Unable to resolve ./schemas/index.js from shared/src/index.ts` | The `@parkwalk/shared` workspace uses TypeScript NodeNext ESM convention (explicit `.js` extensions on imports of `.ts` files); Metro's default resolver doesn't strip `.js` → `.ts` | Added a custom `resolveRequest` fallback in `mobile/metro.config.js` |
-| 7 | App launched then crashed at JS startup: `[Permissions] No permission handler detected` | `react-native-permissions@4.1.5` ships no handlers by default; the Podfile must call `setup_permissions(['LocationWhenInUse', 'LocationAlways', 'Motion'])` | Added the call in the Podfile (after `require_relative '.../scripts/setup'`) |
+| #   | Issue                                                                                                     | Root cause                                                                                                                                                                           | Fix                                                                                                                                               |
+| --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `react-native init` deleted committed files in `mobile/`                                                  | The CLI overwrites TS files silently when run in a non-empty directory                                                                                                               | `git checkout HEAD -- mobile/`; kept the generated native-only files                                                                              |
+| 2   | `pod install` failed: `cannot load '@rnmapbox/maps/scripts/install'`                                      | In `rnmapbox-maps@10.1.30` that script no longer exists; `$RNMapboxMaps` is defined by the podspec itself. Also `$RNMapboxMapsDownloadToken = ''` (truthy) broke `~/.netrc` auth     | Podfile calls `$RNMapboxMaps.pre_install(installer)` and `.post_install(installer)` inside the hook blocks; removed the bogus download-token line |
+| 3   | Build failed: `../node_modules/react-native/scripts/xcode/with-environment.sh: No such file or directory` | RN-CLI's "Bundle React Native code and images" script uses `../node_modules/`, which is `mobile/node_modules/` — missing because npm workspaces hoisted to repo root                 | Changed the script phase in `project.pbxproj` to `../../node_modules/`                                                                            |
+| 4   | Linker spam about "built for newer iOS-simulator (14.0) than linked (13.4)"                               | Main target's `IPHONEOS_DEPLOYMENT_TARGET` was 13.4 (RN 0.73 default) but the Podfile forced all pods to 14.0 for Mapbox + rnmapbox                                                  | Set main-target deployment target to 14.0 (4 occurrences in `project.pbxproj`)                                                                    |
+| 5   | Metro crashed: `Cannot find module 'babel-plugin-module-resolver'`                                        | `mobile/babel.config.js` uses the plugin to resolve `@/*` path aliases but it was never declared in `mobile/package.json`                                                            | `npm install --workspace=mobile --save-dev babel-plugin-module-resolver`                                                                          |
+| 6   | Metro crashed: `Unable to resolve ./schemas/index.js from shared/src/index.ts`                            | The `@parkwalk/shared` workspace uses TypeScript NodeNext ESM convention (explicit `.js` extensions on imports of `.ts` files); Metro's default resolver doesn't strip `.js` → `.ts` | Added a custom `resolveRequest` fallback in `mobile/metro.config.js`                                                                              |
+| 7   | App launched then crashed at JS startup: `[Permissions] No permission handler detected`                   | `react-native-permissions@4.1.5` ships no handlers by default; the Podfile must call `setup_permissions(['LocationWhenInUse', 'LocationAlways', 'Motion'])`                          | Added the call in the Podfile (after `require_relative '.../scripts/setup'`)                                                                      |
 
 Once all seven fixes were in place, the iOS build succeeded on first
 try, installed on the iPhone, and the Onboarding screen rendered with
@@ -57,35 +59,36 @@ c658be4 chore(mobile/ios): overlay ParkWalk Info.plist and Podfile templates
 ```
 
 Each commit message carries the reproduction + fix, so a future clean
-re-bootstrap (e.g. on another Mac, or after an RN upgrade) can be
-reconstructed by reading the log on this branch.
+re-bootstrap (e.g. on another Mac, or after an RN upgrade) can be reconstructed
+by reading the git log.
 
 ## What works on the device today
 
 - Native build on Xcode 26 / iOS 26 SDK / arm64, signed with free
   Personal Team.
 - Hermes JS engine boots, renders the navigation stack.
-- Onboarding → Login → Register screens functional (UI only).
+- Onboarding → Login → Register screens are functional against the hosted API.
 - iOS runtime permission prompts fire for **LocationWhenInUse**,
   **LocationAlways**, and **Motion**, with our custom Info.plist strings.
-- Mapbox iOS SDK is bundled and signed (not yet exercised — MapScreen is
-  unreachable without auth).
+- Mapbox iOS SDK is bundled and signed; MapScreen renders after auth.
+- Marker tap collect flow is wired to the hosted backend, with idempotent
+  retries and server-side movement/distance validation.
 - Background modes: `location`, `fetch` declared.
 - `mobile/.env` wired (`MAPBOX_ACCESS_TOKEN=pk.*`; `API_BASE_URL` is empty
   for the default Railway API or an HTTPS hosted staging override).
 - `~/.netrc` holds the Mapbox `sk.*` with `DOWNLOADS:READ` scope for
   CocoaPods.
 
-## What's blocked by this sprint's scope
+## Remaining constraints
 
-- **End-to-end login**: now uses the hosted Railway API over HTTPS.
-- **Map rendering + collect loop**: gated by login (next sprint).
 - **Free provisioning** expires every 7 days. To reprovision: plug in
   iPhone, Xcode → Run. (Not a bug; Apple's free-tier contract.)
 - **Many Xcode warnings** (hundreds) — all of them are either (a) iOS 26
   SDK deprecation notices from RN 0.73 internals, (b) CocoaPods script
   phases not declaring outputs, or (c) Apple privacy-manifest aggregation
   notes. None affect runtime. Revisited when we upgrade RN.
+- **Native pedometer / HealthKit** is not implemented yet; JS accelerometer
+  steps remain a fallback signal.
 
 ## Retro: first-walk attempt (Apr 2026)
 
@@ -150,10 +153,9 @@ fixes that landed in the same session.
   (3 attempts, 400 ms / 1200 ms jitter) in
   `mobile/src/services/apiClient.ts`. The server's existing
   `Idempotency-Key` route guarantees replays return the stored result
-  rather than double-collecting. UI now shows `collect: sending` /
-  `collect: retry 2/3` in the debug overlay, disables tapping other
-  markers mid-collect, and distinguishes too-far / network / hard-reject
-  errors in the alert body.
+  rather than double-collecting. The app disables tapping other markers
+  mid-collect and distinguishes too-far / network / hard-reject errors in
+  the alert body.
 - **Pedometer still produced zero steps while hand-held.** Root cause:
   the gravity-compensated peak-detection threshold was set at
   `1.0 m/s²`, which is the right value for pocketed walking (strong
@@ -261,16 +263,18 @@ Phase 1 and tracked here so we don't lose them:
    supported mobile API path, so DHCP, ATS IP exceptions, and Mac firewall
    issues are no longer part of the first-walk loop.
 
-## Next session
+## Current handoff
 
 1. Verify Railway `/health` and `/ready`.
 2. Enable `NEARBY_AUTO_SEED_ENABLED=true` on Railway or run the seed script as
    a Railway one-off command near the test route.
 3. Reload the app on the phone → register → Map screen → walk outside
-   → confirm movement state flips to `WALKING_VALID` → tap marker → collect.
+   → tap marker → collect.
+4. Verify the resulting stats and `user_collections` row in the database, then
+   save a real movement fixture for regression tests.
 
 Reference: `docs/04-SETUP-BACKEND.md`, `docs/02-DATABASE-SCHEMA.md`,
-`docs/12-FIRST-WALK.md`.
+`docs/12-FIRST-WALK.md`, `docs/00-CURRENT-STATUS.md`.
 
 ## Files touched during this sprint
 
