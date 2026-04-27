@@ -32,7 +32,8 @@ The current goal is not feature expansion. The goal is to prove the core loop:
 - **Mobile**: React Native iOS app with onboarding, auth screens, Mapbox map,
   user-location recenter control, marker tap collect flow, Stats, Settings,
   Keychain token storage, silent refresh, hosted HTTPS API settings, and no
-  debug overlay on the map.
+  product debug overlay on the map. A build-time `FIELD_DEBUG_OVERLAY` flag can
+  show field telemetry in Metro-free Release builds.
 - **Infrastructure**: Railway backend runbook and local Docker
   Postgres/PostGIS/Redis for integration tests.
 

@@ -144,6 +144,52 @@ Free provisioning expires. You'll see "Untrusted Developer" again. Plug the
 iPhone in, hit Run in Xcode, permission renews for another 7 days. No code
 changes needed.
 
+## 9. Metro-free outdoor test build
+
+Use this when you want to walk outside on cellular without depending on Metro,
+your Mac, or local Wi-Fi.
+
+The repo includes a shared Xcode scheme named **ParkWalkRelease**. It runs the
+iOS target with Xcode's **Release** configuration. In Release, `AppDelegate.mm`
+loads `main.jsbundle` from inside the app:
+
+```objc
+[[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"]
+```
+
+That bundle is produced by the Xcode build phase **Bundle React Native code and
+images**, so the installed app can run without `npm start`.
+
+Before building, decide whether you want the field diagnostics overlay in the
+Release build:
+
+```env
+# mobile/.env
+FIELD_DEBUG_OVERLAY=true
+```
+
+Set it to `false` for a cleaner product-like build. Changing `.env` requires
+another Xcode build.
+
+Steps:
+
+1. Open `mobile/ios/ParkWalk.xcworkspace`.
+2. In the scheme picker, select **ParkWalkRelease**.
+3. Select your connected iPhone as the destination.
+4. Product → Run.
+5. After the app launches, disconnect Wi-Fi if desired and test on cellular.
+
+Expected behavior:
+
+- No "Cannot connect to Metro" warning.
+- API calls go to the hosted Railway URL.
+- Map tiles load from Mapbox over cellular.
+- GPS/movement/collect behavior works without the Mac nearby.
+
+If the app fails to launch in Release, first check Xcode's build log for the
+React Native bundling phase. Common causes are missing `MAPBOX_ACCESS_TOKEN` in
+`mobile/.env` or a stale build after changing `.env`.
+
 ## Troubleshooting
 
 - **Pod install hangs on Mapbox**: bad `~/.netrc` or wrong token scope. The
@@ -159,6 +205,9 @@ changes needed.
 - **App can't reach backend**: Settings must show an `https://` Railway API
   URL. Open `https://<railway-url>/health` in iPhone Safari. If Safari works
   but the app does not, rebuild after editing `mobile/.env`.
+- **Cannot connect to Metro**: you installed a Debug build. Use the
+  **ParkWalkRelease** scheme for outdoor cellular tests that should not depend
+  on Metro.
 - **Constant "Background Location Indicator"**: expected behavior when
   `UIBackgroundModes: location` is enabled and the app is using GPS.
 

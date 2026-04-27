@@ -1,7 +1,8 @@
 import MapboxGL from '@rnmapbox/maps';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import Config from 'react-native-config';
 import type { GameEntity } from '@parkwalk/shared';
 import type { Position } from 'geojson';
 
@@ -16,6 +17,9 @@ import { haversineMeters } from '@/util/geo';
 // distance to an entity; prevents inflated-uncertainty "teleport" collects.
 const MAX_ACCURACY_TOLERANCE_M = 35;
 const DEFAULT_CENTER_COORDINATE: Position = [-122.4194, 37.7749];
+const SHOW_FIELD_DIAGNOSTICS = __DEV__ || Config.FIELD_DEBUG_OVERLAY === 'true';
+
+type VisibleBounds = { ne: Position; sw: Position };
 
 type CollectUiState =
   | { kind: 'idle' }
@@ -30,8 +34,6 @@ type CollectUiState =
 
 export function MapScreen(): JSX.Element {
   const movement = useMovementDetection();
-  const mapRef = useRef<MapboxGL.MapView>(null);
-  const cameraRef = useRef<MapboxGL.Camera>(null);
   const isFollowingUserRef = useRef(true);
   const [lastLocation, setLastLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [collectUi, setCollectUi] = useState<CollectUiState>({ kind: 'idle' });
@@ -77,7 +79,7 @@ export function MapScreen(): JSX.Element {
   }, []);
 
   const updateRecenterVisibility = useCallback(
-    (bounds: { ne: Position; sw: Position }, following = isFollowingUserRef.current) => {
+    (bounds: VisibleBounds, following = isFollowingUserRef.current) => {
       if (!latestUserCoordinate) {
         setShowRecenterButton(false);
         return;
@@ -87,24 +89,6 @@ export function MapScreen(): JSX.Element {
     },
     [latestUserCoordinate],
   );
-
-  const refreshVisibleBounds = useCallback(
-    async (following = isFollowingUserRef.current) => {
-      try {
-        const bounds = await mapRef.current?.getVisibleBounds();
-        if (!bounds) return;
-        const [ne, sw] = bounds;
-        updateRecenterVisibility({ ne, sw }, following);
-      } catch {
-        // Mapbox can reject while the map is still mounting; the next camera event will retry.
-      }
-    },
-    [updateRecenterVisibility],
-  );
-
-  useEffect(() => {
-    void refreshVisibleBounds();
-  }, [latestUserCoordinate, refreshVisibleBounds]);
 
   const nearbyEnabled = !!movement.latest || !!lastLocation;
 
@@ -182,26 +166,35 @@ export function MapScreen(): JSX.Element {
     return d - tolerance <= entity.collectionRadiusMeters;
   };
 
+  const nearest = useMemo(() => {
+    if (!livePoint) return null;
+    let best: { entity: GameEntity; distance: number } | null = null;
+    for (const entity of nearbyQuery.data ?? []) {
+      const distance = haversineMeters(livePoint, entity.location);
+      if (!best || distance < best.distance) best = { entity, distance };
+    }
+    return best;
+  }, [livePoint, nearbyQuery.data]);
+
   const isCollectInFlight = collectUi.kind !== 'idle';
 
   return (
     <View style={styles.container}>
       <MapboxGL.MapView
-        ref={mapRef}
         style={styles.map}
         onDidFinishLoadingMap={() => undefined}
         onCameraChanged={(state) => {
-          if (state.gestures.isGestureActive) {
-            setFollowingUser(false);
-            updateRecenterVisibility(state.properties.bounds, false);
+          if (!state.gestures?.isGestureActive) return;
+          setFollowingUser(false);
+          const bounds = toVisibleBounds(state.properties?.bounds);
+          if (bounds) {
+            updateRecenterVisibility(bounds, false);
           }
         }}
-        onMapIdle={(state) => updateRecenterVisibility(state.properties.bounds)}
         logoEnabled={false}
         attributionEnabled={true}
       >
         <MapboxGL.Camera
-          ref={cameraRef}
           zoomLevel={16}
           centerCoordinate={centerCoords}
           followZoomLevel={16}
@@ -248,13 +241,30 @@ export function MapScreen(): JSX.Element {
           style={({ pressed }) => [styles.recenterButton, pressed && styles.recenterButtonPressed]}
           onPress={() => {
             if (!latestUserCoordinate) return;
-            cameraRef.current?.flyTo(latestUserCoordinate, 600);
             setFollowingUser(true);
             setShowRecenterButton(false);
           }}
         >
           <View style={styles.navigationArrow} />
         </Pressable>
+      ) : null}
+      {SHOW_FIELD_DIAGNOSTICS ? (
+        <View style={styles.debugOverlay} pointerEvents="none">
+          <Text style={styles.debugText}>
+            state: <Text style={styles.debugBold}>{movement.summary?.state ?? 'UNKNOWN'}</Text>
+            {'\n'}speed: {movement.summary?.averageSpeedMps.toFixed(2) ?? '0.00'} m/s
+            {'\n'}step rate: {(movement.summary?.stepRateHz ?? 0).toFixed(2)} Hz
+            {'\n'}gps ±{(movement.summary?.averageAccuracyMeters ?? 0).toFixed(0)}m{'\n'}entities:{' '}
+            {nearbyQuery.data?.length ?? 0}
+            {'\n'}nearest:{' '}
+            <Text style={styles.debugBold}>
+              {nearest
+                ? `${Math.round(nearest.distance)}m ±${Math.round(liveAccuracyM)}m (need ≤${nearest.entity.collectionRadiusMeters}m)`
+                : '-'}
+            </Text>
+            {'\n'}collect: <Text style={styles.debugBold}>{describeCollectUi(collectUi)}</Text>
+          </Text>
+        </View>
       ) : null}
     </View>
   );
@@ -264,16 +274,40 @@ function roundKey(lat: number, lng: number): string {
   return `${lat.toFixed(3)},${lng.toFixed(3)}`;
 }
 
-function isCoordinateInBounds(
-  coordinate: Position,
-  bounds: { ne: Position; sw: Position },
-): boolean {
+function isCoordinateInBounds(coordinate: Position, bounds: VisibleBounds): boolean {
   const [lng, lat] = coordinate;
   const [east, north] = bounds.ne;
   const [west, south] = bounds.sw;
   const isInLatitude = lat >= south && lat <= north;
   const isInLongitude = west <= east ? lng >= west && lng <= east : lng >= west || lng <= east;
   return isInLatitude && isInLongitude;
+}
+
+function describeCollectUi(ui: CollectUiState): string {
+  switch (ui.kind) {
+    case 'idle':
+      return 'idle';
+    case 'sending':
+      return 'sending';
+    case 'retrying':
+      return `retry ${ui.attempt}/${ui.maxAttempts}`;
+  }
+}
+
+function toVisibleBounds(bounds: unknown): VisibleBounds | null {
+  if (typeof bounds !== 'object' || bounds === null) return null;
+  const candidate = bounds as Partial<VisibleBounds>;
+  if (!isPosition(candidate.ne) || !isPosition(candidate.sw)) return null;
+  return { ne: candidate.ne, sw: candidate.sw };
+}
+
+function isPosition(value: unknown): value is Position {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number'
+  );
 }
 
 interface AxiosLikeError {
@@ -365,5 +399,25 @@ const styles = StyleSheet.create({
     borderRightColor: 'transparent',
     borderBottomColor: '#2563EB',
     transform: [{ rotate: '45deg' }, { translateY: -1 }],
+  },
+  debugOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 8,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#333',
+  },
+  debugBold: {
+    fontWeight: '600',
   },
 });

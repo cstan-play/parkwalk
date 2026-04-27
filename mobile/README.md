@@ -33,6 +33,15 @@ cd mobile && npm start
 # 3. Build and run on iPhone from Xcode (Cmd-R)
 ```
 
+## Outdoor cellular test loop
+
+Use the Xcode scheme **ParkWalkRelease** when you need a Metro-free build for
+field testing. Release builds package the React Native JS bundle into the app,
+so the phone can run on cellular without your Mac or local Wi-Fi.
+
+Set `FIELD_DEBUG_OVERLAY=true` in `mobile/.env` before building if you want the
+field telemetry overlay in the Release build.
+
 ## Current architecture notes
 
 - Auth tokens live in Keychain via `src/services/secureStorage.ts`.

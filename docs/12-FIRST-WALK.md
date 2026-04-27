@@ -47,12 +47,19 @@ testing the app.
 
 ## Step 2 — Build and install on iPhone
 
+For a quick desk test with Metro, use the normal `ParkWalk` scheme:
+
 ```bash
 # Terminal 1 (Metro)
 cd mobile && npm start
 
 # Xcode: Product → Run
 ```
+
+For an outdoor/cellular test, use the **ParkWalkRelease** Xcode scheme instead.
+That packages the React Native JS bundle into the app, so the phone does not
+need Metro or local Wi-Fi. Set `FIELD_DEBUG_OVERLAY=true` in `mobile/.env`
+before building if you want the field telemetry overlay in this Release build.
 
 Wait ~30-60 seconds for first build. App opens on phone.
 
