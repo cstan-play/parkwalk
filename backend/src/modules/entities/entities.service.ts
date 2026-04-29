@@ -7,6 +7,7 @@ import {
   movementInvalid,
   notFound,
   outOfRange,
+  walkRequired,
 } from '../../errors.js';
 import { logger } from '../../logger.js';
 import { prisma } from '../../prisma.js';
@@ -80,6 +81,11 @@ export async function collect(
   idempotencyKey: string,
   request: CollectRequest,
 ): Promise<CollectResponse> {
+  if (!request.walkSessionId) {
+    throw walkRequired();
+  }
+  const walkSessionId = request.walkSessionId;
+
   const validation = validateMovement({
     summary: request.summary,
     samples: request.samples,
@@ -114,6 +120,7 @@ export async function collect(
           validated: dup.movement_validated,
           points: dup.points_earned,
           userId,
+          walkSessionId: dup.walk_client_id ?? walkSessionId,
         });
       }
 
@@ -187,6 +194,7 @@ export async function collect(
         },
         pointsEarned: points,
         idempotencyKey,
+        walkClientId: walkSessionId,
       });
 
       await incrementEntityCollections(tx, entity.id);
@@ -225,6 +233,7 @@ export async function collect(
         validated: true,
         points,
         userId,
+        walkSessionId,
       });
     },
     { isolationLevel: 'Serializable', maxWait: 5000, timeout: 15000 },
@@ -243,6 +252,7 @@ async function hydrateResponse(
     validated: boolean;
     points: number;
     userId: string;
+    walkSessionId: string;
   },
 ): Promise<CollectResponse> {
   const stats = await tx.userStats.findUnique({ where: { userId: input.userId } });
@@ -250,6 +260,7 @@ async function hydrateResponse(
     collection: {
       id: input.id,
       entityId: input.entity_id,
+      walkSessionId: input.walkSessionId,
       collectedAt: input.collected_at.toISOString(),
       distanceFromEntityMeters: Number(input.distance_meters),
       movementValidated: input.validated,

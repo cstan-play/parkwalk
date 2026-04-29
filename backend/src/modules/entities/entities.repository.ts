@@ -243,6 +243,7 @@ export async function insertUserCollection(
     movementData: unknown;
     pointsEarned: number;
     idempotencyKey: string;
+    walkClientId: string;
   },
 ): Promise<{ id: string; collected_at: Date }> {
   const rows = await tx.$queryRaw<{ id: string; collected_at: Date }[]>`
@@ -255,7 +256,8 @@ export async function insertUserCollection(
       movement_state,
       movement_data,
       points_earned,
-      idempotency_key
+      idempotency_key,
+      walk_client_id
     ) VALUES (
       ${params.userId}::uuid,
       ${params.entityId}::uuid,
@@ -265,7 +267,8 @@ export async function insertUserCollection(
       ${params.movementState},
       ${JSON.stringify(params.movementData)}::jsonb,
       ${params.pointsEarned},
-      ${params.idempotencyKey}
+      ${params.idempotencyKey},
+      ${params.walkClientId}::uuid
     )
     RETURNING id, collected_at
   `;
@@ -284,6 +287,7 @@ export async function findExistingCollectionByIdempotency(
       distance_from_entity_meters: number;
       movement_validated: boolean;
       points_earned: number;
+      walk_client_id: string | null;
     }
   | undefined
 > {
@@ -295,9 +299,10 @@ export async function findExistingCollectionByIdempotency(
       distance_from_entity_meters: number;
       movement_validated: boolean;
       points_earned: number;
+      walk_client_id: string | null;
     }[]
   >`
-    SELECT id, entity_id, collected_at, distance_from_entity_meters, movement_validated, points_earned
+    SELECT id, entity_id, collected_at, distance_from_entity_meters, movement_validated, points_earned, walk_client_id
     FROM user_collections
     WHERE user_id = ${userId}::uuid AND idempotency_key = ${idempotencyKey}
   `;

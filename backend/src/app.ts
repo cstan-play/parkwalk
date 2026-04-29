@@ -11,6 +11,7 @@ import { logger } from './logger.js';
 import { buildAuthRouter } from './modules/auth/auth.router.js';
 import { buildEntitiesRouter } from './modules/entities/entities.router.js';
 import { buildUsersRouter } from './modules/users/users.router.js';
+import { buildWalksRouter } from './modules/walks/walks.router.js';
 import { buildHealthRouter } from './health.js';
 
 import './types.js';
@@ -59,6 +60,7 @@ export function buildApp(): Express {
   app.use(`${base}/auth`, buildAuthRouter());
   app.use(`${base}/entities`, buildEntitiesRouter());
   app.use(`${base}/users`, buildUsersRouter());
+  app.use(`${base}/walks`, buildWalksRouter());
 
   app.use((req, res) => {
     res.status(404).json({

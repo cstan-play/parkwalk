@@ -5,4 +5,5 @@ export * from './auth.js';
 export * from './entity.js';
 export * from './movement.js';
 export * from './collect.js';
+export * from './walk.js';
 export * from './user.js';

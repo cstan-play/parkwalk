@@ -8,6 +8,8 @@ import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { RegisterScreen } from '@/screens/RegisterScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { StatsScreen } from '@/screens/StatsScreen';
+import { WalkDetailScreen } from '@/screens/WalkDetailScreen';
+import { WalkHistoryScreen } from '@/screens/WalkHistoryScreen';
 import { useAuthStore } from '@/stores/authStore';
 
 export type RootStackParamList = {
@@ -16,6 +18,8 @@ export type RootStackParamList = {
   Register: undefined;
   Map: undefined;
   Stats: undefined;
+  WalkHistory: undefined;
+  WalkDetail: { walkId: string; clientId: string };
   Settings: undefined;
 };
 
@@ -56,12 +60,23 @@ export function RootNavigator(): JSX.Element {
               headerRight: () => (
                 <View style={styles.headerActions}>
                   <Button title="Stats" onPress={() => navigation.navigate('Stats')} />
+                  <Button title="Walks" onPress={() => navigation.navigate('WalkHistory')} />
                   <Button title="Settings" onPress={() => navigation.navigate('Settings')} />
                 </View>
               ),
             })}
           />
           <Stack.Screen name="Stats" component={StatsScreen} options={{ title: 'Stats' }} />
+          <Stack.Screen
+            name="WalkHistory"
+            component={WalkHistoryScreen}
+            options={{ title: 'Walks' }}
+          />
+          <Stack.Screen
+            name="WalkDetail"
+            component={WalkDetailScreen}
+            options={{ title: 'Walk Detail' }}
+          />
           <Stack.Screen
             name="Settings"
             component={SettingsScreen}

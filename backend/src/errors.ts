@@ -24,6 +24,8 @@ export const outOfRange = (message = 'Out of range') =>
   new ApiError(400, 'OUT_OF_RANGE', message);
 export const movementInvalid = (message: string, details?: unknown) =>
   new ApiError(400, 'MOVEMENT_INVALID', message, details);
+export const walkRequired = (message = 'Start a walk to collect') =>
+  new ApiError(400, 'WALK_REQUIRED', message);
 export const alreadyCollected = (message = 'Already collected') =>
   new ApiError(409, 'ALREADY_COLLECTED', message);
 export const idempotencyMismatch = () =>

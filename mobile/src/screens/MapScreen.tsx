@@ -1,15 +1,25 @@
+import type { GameEntity } from '@parkwalk/shared';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MapboxGL from '@rnmapbox/maps';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Position } from 'geojson';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Config from 'react-native-config';
-import type { GameEntity } from '@parkwalk/shared';
-import type { Position } from 'geojson';
 
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { useMovementDetection } from '@/hooks/useMovementDetection';
+import { useWalkSession } from '@/hooks/useWalkSession';
+import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { onRetry } from '@/services/apiClient';
 import { collectEntity, fetchNearby } from '@/services/entitiesApi';
+import {
+  getMovingDurationSeconds,
+  getPausedDurationSeconds,
+  useWalkSessionStore,
+  type LocalWalkSession,
+} from '@/stores/walkSessionStore';
 import { haversineMeters } from '@/util/geo';
 
 // Mirrors `MAX_ACCURACY_TOLERANCE_M` on the backend. Cap applied to the user's
@@ -20,6 +30,7 @@ const DEFAULT_CENTER_COORDINATE: Position = [-122.4194, 37.7749];
 const SHOW_FIELD_DIAGNOSTICS = __DEV__ || Config.FIELD_DEBUG_OVERLAY === 'true';
 
 type VisibleBounds = { ne: Position; sw: Position };
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Map'>;
 
 type CollectUiState =
   | { kind: 'idle' }
@@ -34,13 +45,25 @@ type CollectUiState =
 
 export function MapScreen(): JSX.Element {
   const movement = useMovementDetection();
+  useWalkSession(movement);
+  const navigation = useNavigation<Nav>();
   const isFollowingUserRef = useRef(true);
   const [lastLocation, setLastLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [collectUi, setCollectUi] = useState<CollectUiState>({ kind: 'idle' });
   const [isFollowingUser, setIsFollowingUser] = useState(true);
   const [showRecenterButton, setShowRecenterButton] = useState(false);
+  const [fieldDiagnosticsExpanded, setFieldDiagnosticsExpanded] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
   const idem = useIdempotencyKey();
   const queryClient = useQueryClient();
+  const activeWalk = useWalkSessionStore((s) => s.activeSession);
+  const recoveryPromptPending = useWalkSessionStore((s) => s.recoveryPromptPending);
+  const startWalk = useWalkSessionStore((s) => s.startWalk);
+  const pauseWalk = useWalkSessionStore((s) => s.pauseWalk);
+  const resumeWalk = useWalkSessionStore((s) => s.resumeWalk);
+  const endWalk = useWalkSessionStore((s) => s.endWalk);
+  const discardActiveWalk = useWalkSessionStore((s) => s.discardActiveWalk);
+  const markCollected = useWalkSessionStore((s) => s.markCollected);
 
   // Scoped by idempotency key so concurrent collects
   // (unlikely given the marker-tap disable, but defensive) don't cross-talk.
@@ -59,6 +82,15 @@ export function MapScreen(): JSX.Element {
       });
     });
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (recoveryPromptPending) setFieldDiagnosticsExpanded(false);
+  }, [recoveryPromptPending]);
 
   const centerCoords = useMemo(() => {
     if (movement.latest) {
@@ -107,6 +139,9 @@ export function MapScreen(): JSX.Element {
 
   const collectMutation = useMutation({
     mutationFn: async (entity: GameEntity) => {
+      if (!activeWalk || activeWalk.status !== 'active') {
+        throw new Error(activeWalk?.status === 'paused' ? 'Resume your walk to collect.' : 'Start a walk to collect.');
+      }
       if (!movement.summary || !movement.latest) {
         throw new Error('No movement summary yet; stand still for a second and try again');
       }
@@ -114,6 +149,7 @@ export function MapScreen(): JSX.Element {
       setCollectUi({ kind: 'sending', entityId: entity.id, idempotencyKey: key });
       return await collectEntity(key, {
         entityId: entity.id,
+        walkSessionId: activeWalk.clientId,
         location: movement.latest.location,
         summary: movement.summary,
         samples: movement.samples,
@@ -122,6 +158,7 @@ export function MapScreen(): JSX.Element {
     },
     onSuccess: (_data, entity) => {
       setCollectUi({ kind: 'idle' });
+      void markCollected(entity.id);
       Alert.alert(
         'Collected!',
         `+${Number((entity.config as { points?: number }).points ?? 0)} points`,
@@ -177,6 +214,38 @@ export function MapScreen(): JSX.Element {
   }, [livePoint, nearbyQuery.data]);
 
   const isCollectInFlight = collectUi.kind !== 'idle';
+  const nowIso = useMemo(() => new Date(nowTick).toISOString(), [nowTick]);
+  const movingSeconds = activeWalk ? getMovingDurationSeconds(activeWalk, nowIso) : 0;
+  const pausedSeconds = activeWalk ? getPausedDurationSeconds(activeWalk.pauseIntervals, nowIso) : 0;
+  const routeCoordinates = useMemo<Position[]>(() => {
+    if (!activeWalk || activeWalk.path.length < 2) return [];
+    return activeWalk.path.map((point) => [point.longitude, point.latitude]);
+  }, [activeWalk]);
+  const routeShape = useMemo(
+    () =>
+      routeCoordinates.length >= 2
+        ? ({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: routeCoordinates },
+          } as const)
+        : null,
+    [routeCoordinates],
+  );
+  const openCompletedWalk = useCallback(
+    (walk: LocalWalkSession | null) => {
+      if (!walk) return;
+      navigation.navigate('WalkDetail', {
+        walkId: walk.serverId ?? walk.clientId,
+        clientId: walk.clientId,
+      });
+    },
+    [navigation],
+  );
+  const endAndOpenWalk = useCallback(async () => {
+    const completed = await endWalk();
+    openCompletedWalk(completed);
+  }, [endWalk, openCompletedWalk]);
 
   return (
     <View style={styles.container}>
@@ -205,6 +274,20 @@ export function MapScreen(): JSX.Element {
           visible
           onUpdate={(u) => setLastLocation({ lat: u.coords.latitude, lng: u.coords.longitude })}
         />
+        {routeShape ? (
+          <MapboxGL.ShapeSource id="active-walk-route" shape={routeShape}>
+            <MapboxGL.LineLayer
+              id="active-walk-route-line"
+              style={{
+                lineColor: '#0EA5E9',
+                lineWidth: 5,
+                lineOpacity: 0.82,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </MapboxGL.ShapeSource>
+        ) : null}
         {(nearbyQuery.data ?? []).map((e) => {
           const dimmed =
             isCollectInFlight && 'entityId' in collectUi && collectUi.entityId === e.id;
@@ -215,6 +298,14 @@ export function MapScreen(): JSX.Element {
               coordinate={[e.location.longitude, e.location.latitude]}
               onSelected={() => {
                 if (isCollectInFlight) return;
+                if (!activeWalk) {
+                  Alert.alert('Start a walk', 'Start a walk to collect nearby items.');
+                  return;
+                }
+                if (activeWalk.status === 'paused') {
+                  Alert.alert('Walk paused', 'Resume your walk to collect nearby items.');
+                  return;
+                }
                 if (!collectable(e)) {
                   const d = liveDistanceTo(e);
                   Alert.alert(
@@ -233,6 +324,92 @@ export function MapScreen(): JSX.Element {
           );
         })}
       </MapboxGL.MapView>
+      <View style={styles.walkPanel}>
+        <View style={styles.walkMetrics}>
+          <Metric label="moving" value={formatDuration(movingSeconds)} />
+          <Metric label="distance" value={`${Math.round(activeWalk?.distanceMeters ?? 0)}m`} />
+          <Metric label="steps" value={`${activeWalk?.stepCount ?? 0}`} />
+        </View>
+        {activeWalk && pausedSeconds > 0 ? (
+          <Text style={styles.pausedText}>Paused {formatDuration(pausedSeconds)}</Text>
+        ) : null}
+        <View style={styles.walkActions}>
+          {!activeWalk ? (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.primaryWalkButton}
+              onPress={() => void startWalk(movement.latest?.location ?? null)}
+            >
+              <Text style={styles.primaryWalkButtonText}>Start Walk</Text>
+            </Pressable>
+          ) : activeWalk.status === 'paused' ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.primaryWalkButton}
+                onPress={() => void resumeWalk()}
+              >
+                <Text style={styles.primaryWalkButtonText}>Resume</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.secondaryWalkButton}
+                onPress={() => void endAndOpenWalk()}
+              >
+                <Text style={styles.secondaryWalkButtonText}>End</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.secondaryWalkButton}
+                onPress={() => void pauseWalk()}
+              >
+                <Text style={styles.secondaryWalkButtonText}>Pause</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.dangerWalkButton}
+                onPress={() => void endAndOpenWalk()}
+              >
+                <Text style={styles.dangerWalkButtonText}>End</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </View>
+      {activeWalk && recoveryPromptPending ? (
+        <View style={styles.recoveryPanel}>
+          <Text style={styles.recoveryTitle}>Unfinished walk</Text>
+          <Text style={styles.recoveryText}>
+            ParkWalk found a walk that was not ended. Save it up to the last reliable movement,
+            or discard it.
+          </Text>
+          <View style={styles.walkActions}>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.primaryWalkButton}
+              onPress={() =>
+                void endWalk({
+                  recovered: true,
+                  reason: 'app_reopened_with_unfinished_walk',
+                  endedAt: activeWalk.lastMovementAt,
+                }).then(openCompletedWalk)
+              }
+            >
+              <Text style={styles.primaryWalkButtonText}>Save Walk</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.dangerWalkButton}
+              onPress={() => void discardActiveWalk()}
+            >
+              <Text style={styles.dangerWalkButtonText}>Discard</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       {showRecenterButton ? (
         <Pressable
           accessibilityLabel="Center map on your location"
@@ -249,25 +426,73 @@ export function MapScreen(): JSX.Element {
         </Pressable>
       ) : null}
       {SHOW_FIELD_DIAGNOSTICS ? (
-        <View style={styles.debugOverlay} pointerEvents="none">
-          <Text style={styles.debugText}>
-            state: <Text style={styles.debugBold}>{movement.summary?.state ?? 'UNKNOWN'}</Text>
-            {'\n'}speed: {movement.summary?.averageSpeedMps.toFixed(2) ?? '0.00'} m/s
-            {'\n'}step rate: {(movement.summary?.stepRateHz ?? 0).toFixed(2)} Hz
-            {'\n'}gps ±{(movement.summary?.averageAccuracyMeters ?? 0).toFixed(0)}m{'\n'}entities:{' '}
-            {nearbyQuery.data?.length ?? 0}
-            {'\n'}nearest:{' '}
-            <Text style={styles.debugBold}>
-              {nearest
-                ? `${Math.round(nearest.distance)}m ±${Math.round(liveAccuracyM)}m (need ≤${nearest.entity.collectionRadiusMeters}m)`
-                : '-'}
+        fieldDiagnosticsExpanded && !recoveryPromptPending ? (
+          <View style={styles.debugOverlay}>
+            <View style={styles.debugHeader}>
+              <Text style={styles.debugHeaderText}>Field diagnostics</Text>
+              <Pressable
+                accessibilityLabel="Collapse field diagnostics"
+                accessibilityRole="button"
+                hitSlop={8}
+                style={styles.debugToggleButton}
+                onPress={() => setFieldDiagnosticsExpanded(false)}
+              >
+                <Text style={styles.debugToggleText}>Hide</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.debugText}>
+              state: <Text style={styles.debugBold}>{movement.summary?.state ?? 'UNKNOWN'}</Text>
+              {'\n'}speed: {movement.summary?.averageSpeedMps.toFixed(2) ?? '0.00'} m/s
+              {'\n'}step rate: {(movement.summary?.stepRateHz ?? 0).toFixed(2)} Hz
+              {'\n'}gps ±{(movement.summary?.averageAccuracyMeters ?? 0).toFixed(0)}m
+              {'\n'}entities: {nearbyQuery.data?.length ?? 0}
+              {'\n'}walk:{' '}
+              <Text style={styles.debugBold}>
+                {activeWalk ? `${activeWalk.status} ${Math.round(activeWalk.distanceMeters)}m` : 'none'}
+              </Text>
+              {'\n'}nearest:{' '}
+              <Text style={styles.debugBold}>
+                {nearest
+                  ? `${Math.round(nearest.distance)}m ±${Math.round(liveAccuracyM)}m (need ≤${nearest.entity.collectionRadiusMeters}m)`
+                  : '-'}
+              </Text>
+              {'\n'}collect: <Text style={styles.debugBold}>{describeCollectUi(collectUi)}</Text>
             </Text>
-            {'\n'}collect: <Text style={styles.debugBold}>{describeCollectUi(collectUi)}</Text>
-          </Text>
-        </View>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityLabel="Expand field diagnostics"
+            accessibilityRole="button"
+            hitSlop={8}
+            style={styles.debugChip}
+            onPress={() => {
+              if (!recoveryPromptPending) setFieldDiagnosticsExpanded(true);
+            }}
+          >
+            <Text style={styles.debugChipText}>
+              Field: {movement.summary?.state ?? 'UNKNOWN'}
+              {activeWalk ? ` · ${Math.round(activeWalk.distanceMeters)}m` : ''}
+            </Text>
+          </Pressable>
+        )
       ) : null}
     </View>
   );
+}
+
+function Metric({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function roundKey(lat: number, lng: number): string {
@@ -340,8 +565,20 @@ function categorizeError(err: unknown): { title: string; message: string } {
       message: serverMessage ?? 'The server rejected this walk as not on foot.',
     };
   }
+  if (serverCode === 'WALK_REQUIRED') {
+    return {
+      title: 'Start a walk',
+      message: serverMessage ?? 'Start a walk to collect nearby items.',
+    };
+  }
   if (status === 429) {
     return { title: 'Slow down', message: 'Too many collect attempts. Wait a moment.' };
+  }
+  if (err instanceof Error && !e.response) {
+    return {
+      title: 'Cannot collect',
+      message: err.message,
+    };
   }
   // No response at all = ran out of retries, still couldn't reach server.
   if (!e.response) {
@@ -359,6 +596,117 @@ function categorizeError(err: unknown): { title: string; message: string } {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
+  walkPanel: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 16,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 8,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  walkMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  metric: {
+    alignItems: 'center',
+    minWidth: 72,
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  metricLabel: {
+    marginTop: 1,
+    fontSize: 11,
+    color: '#6B7280',
+    textTransform: 'uppercase',
+  },
+  pausedText: {
+    marginBottom: 8,
+    textAlign: 'center',
+    color: '#6B7280',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  walkActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  recoveryPanel: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    top: 16,
+    zIndex: 30,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  recoveryTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  recoveryText: {
+    color: '#4B5563',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  primaryWalkButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 8,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryWalkButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryWalkButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryWalkButtonText: {
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dangerWalkButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 8,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dangerWalkButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   marker: {
     width: 18,
     height: 18,
@@ -373,7 +721,8 @@ const styles = StyleSheet.create({
   recenterButton: {
     position: 'absolute',
     right: 18,
-    bottom: 30,
+    bottom: 154,
+    zIndex: 12,
     width: 58,
     height: 58,
     borderRadius: 29,
@@ -405,6 +754,7 @@ const styles = StyleSheet.create({
     top: 12,
     left: 12,
     right: 12,
+    zIndex: 20,
     backgroundColor: 'rgba(255,255,255,0.88)',
     borderRadius: 8,
     padding: 10,
@@ -412,6 +762,48 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  debugHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  debugHeaderText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  debugToggleButton: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#E5E7EB',
+  },
+  debugToggleText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  debugChip: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 8,
+    maxWidth: '72%',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
+  debugChipText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
   },
   debugText: {
     fontSize: 12,

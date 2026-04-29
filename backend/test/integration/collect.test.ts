@@ -8,6 +8,14 @@ import { resetDatabase } from './setup.js';
 
 const app = buildApp();
 
+function createWalkId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.floor(Math.random() * 16);
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 async function registerAndLogin() {
   const payload = {
     username: `tester_${Date.now()}`,
@@ -51,6 +59,7 @@ describe('POST /api/v1/entities/collect', () => {
       .set('Idempotency-Key', `first-${Date.now()}`)
       .send({
         entityId,
+        walkSessionId: createWalkId(),
         location: { latitude: userLat, longitude: userLng, accuracy: 5 },
         summary: fx.summary,
         samples: fx.samples,
@@ -76,6 +85,7 @@ describe('POST /api/v1/entities/collect', () => {
       .set('Idempotency-Key', `drive-${Date.now()}`)
       .send({
         entityId,
+        walkSessionId: createWalkId(),
         location: { latitude: userLat, longitude: userLng, accuracy: 5 },
         summary: fx.summary,
         samples: fx.samples,
@@ -97,6 +107,7 @@ describe('POST /api/v1/entities/collect', () => {
       .set('Idempotency-Key', `range-${Date.now()}`)
       .send({
         entityId,
+        walkSessionId: createWalkId(),
         location: fx.samples.at(-1)!.location,
         summary: fx.summary,
         samples: fx.samples,
@@ -117,6 +128,7 @@ describe('POST /api/v1/entities/collect', () => {
 
     const body = {
       entityId,
+      walkSessionId: createWalkId(),
       location: { latitude: userLat, longitude: userLng, accuracy: 5 },
       summary: fx.summary,
       samples: fx.samples,
@@ -146,6 +158,7 @@ describe('POST /api/v1/entities/collect', () => {
 
     const base = {
       entityId,
+      walkSessionId: createWalkId(),
       location: { latitude: userLat, longitude: userLng, accuracy: 5 },
       summary: fx.summary,
       samples: fx.samples,
@@ -165,5 +178,28 @@ describe('POST /api/v1/entities/collect', () => {
       .send(base);
     expect(second.status).toBe(409);
     expect(second.body.error.code).toBe('ALREADY_COLLECTED');
+  });
+
+  it('rejects collecting without an active walk id', async () => {
+    const { tokens } = await registerAndLogin();
+    const fx = rebaseFixtureToNow(walkingFixture);
+    const userLat = fx.samples.at(-1)!.location.latitude;
+    const userLng = fx.samples.at(-1)!.location.longitude;
+    const entityId = await seedCollectibleAt(userLat, userLng);
+
+    const res = await request(app)
+      .post('/api/v1/entities/collect')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .set('Idempotency-Key', `walk-required-${Date.now()}`)
+      .send({
+        entityId,
+        location: { latitude: userLat, longitude: userLng, accuracy: 5 },
+        summary: fx.summary,
+        samples: fx.samples,
+        clientSentAt: new Date().toISOString(),
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('WALK_REQUIRED');
   });
 });

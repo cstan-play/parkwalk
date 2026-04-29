@@ -25,9 +25,13 @@ A cross-platform location-based social walking game where users collect items, h
 
 The living project handoff is `00-CURRENT-STATUS.md`.
 
-ParkWalk is currently in the **Phase 1 first-walk loop**: backend, iOS app,
-hosted Railway API, auth, nearby collectibles, collect idempotency, movement
-validation, and stats are implemented enough for a real iPhone walk test.
+ParkWalk is currently in the **Phase 1 first-walk loop** plus the first
+recorded-walk Alpha slice: backend, iOS app, hosted Railway API, auth, nearby
+collectibles, collect idempotency, movement validation, local recorded walks,
+native iOS pedometer integration, route tracing, recovery, and walk history are
+implemented enough for real iPhone testing. Cloud sync for recorded walks is
+implemented locally but still requires the backend changes to be pushed and
+deployed to Railway.
 
 ### Phase 1 P0 — finish the walk proof
 
@@ -40,8 +44,13 @@ validation, and stats are implemented enough for a real iPhone walk test.
 
 ### Alpha P0 — native motion reliability
 
-- Add native iOS `CMPedometer` step backfill/streaming.
-- Optionally read HealthKit step count and walking/running distance.
+- Native iOS `CMPedometer` step backfill/streaming and recorded walk sessions
+  with path tracing, pause/resume, auto-finish, recovery, walk detail, and local
+  history are implemented and field-tested.
+- Deploy the backend walk API and migration to Railway so completed local walks
+  sync from `failed` to `synced`; see `15-WALK-RECORDING.md`.
+- Defer optional HealthKit step/distance aggregation until native pedometer
+  recording is proven.
 - Keep the JS accelerometer step detector as fallback.
 - Revisit soft flags once native steps are reliable.
 
@@ -111,7 +120,8 @@ docs/
 ├── 11-DEPLOYMENT.md            # Future production deployment reference
 ├── 12-FIRST-WALK.md            # First end-to-end walk checklist
 ├── 13-BOOTSTRAP-IOS.md         # iOS bootstrap + field-test retros
-└── 14-DEPLOY-RAILWAY.md        # Railway deploy (monorepo + PostGIS)
+├── 14-DEPLOY-RAILWAY.md        # Railway deploy (monorepo + PostGIS)
+└── 15-WALK-RECORDING.md        # Start/End Walk, path trace, native steps plan
 ```
 
 ## Quick Start (Development)
@@ -164,9 +174,10 @@ cd ios && pod install && cd ..
 - **Done**: backend infrastructure, shared schemas, iOS bootstrap, hosted API
   default, auth refresh/logout, nearby auto-seeding, collect idempotency,
   movement soft-flag validation, and first field-test fixes.
-- **Now**: clean first-walk proof with no debug overlay, DB verification, and a
-  saved real walking fixture.
-- **Next**: native pedometer/HealthKit, walkable-way snapping, offline tiles.
+- **Now**: push/deploy the recorded-walk backend route and migration, then
+  confirm existing on-device failed walk sync rows retry to `synced`.
+- **Next**: DB verification for synced walks and collections linked to walks;
+  then HealthKit, walkable-way snapping, offline tiles.
 - **Later Alpha**: friends/activity, leaderboards, web dashboard, hardening.
 - **Phase 2**: Android, external distribution, push, real-time features,
   challenges/events.
@@ -205,8 +216,10 @@ cd ios && pod install && cd ..
 
 1. Read `00-CURRENT-STATUS.md` for the current handoff.
 2. Follow `12-FIRST-WALK.md` for the next field test.
-3. Review `07-MOVEMENT-DETECTION.md` before changing validation.
-4. Use `14-DEPLOY-RAILWAY.md` for hosted backend work.
+3. Review `15-WALK-RECORDING.md` before implementing recorded walks/native
+   steps.
+4. Review `07-MOVEMENT-DETECTION.md` before changing validation.
+5. Use `14-DEPLOY-RAILWAY.md` for hosted backend work.
 
 ## Support & Resources
 

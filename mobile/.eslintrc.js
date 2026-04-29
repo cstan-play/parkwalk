@@ -1,4 +1,13 @@
 module.exports = {
   root: true,
-  extends: '@react-native',
+  extends: ['../.eslintrc.cjs'],
+  parserOptions: {
+    ecmaFeatures: {
+      jsx: true,
+    },
+  },
+  env: {
+    es2022: true,
+    node: true,
+  },
 };

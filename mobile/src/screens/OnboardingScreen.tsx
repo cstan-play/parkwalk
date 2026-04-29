@@ -16,8 +16,8 @@ export function OnboardingScreen({ navigation }: Props): JSX.Element {
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to ParkWalk</Text>
       <Text style={styles.body}>
-        ParkWalk needs your location and motion to confirm you're walking when
-        collecting. We only store samples when you actively attempt a collect.
+        ParkWalk needs your location and motion to record walks, trace your route,
+        count steps, and confirm collecting happens during an active walk.
       </Text>
       <View style={styles.actions}>
         {!locationGranted ? (

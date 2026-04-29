@@ -33,6 +33,7 @@ model User {
   stats           UserStats?
   sessions        Session[]
   collections     UserCollection[]
+  walkSessions    WalkSession[]
   createdEntities GameEntity[]     @relation("EntityCreator")
 
   @@map("users")
@@ -112,6 +113,34 @@ model GameEntity {
   @@map("game_entities")
 }
 
+model WalkSession {
+  id                    String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  clientId              String   @unique @map("client_id") @db.Uuid
+  userId                String   @map("user_id") @db.Uuid
+  status                String   @db.VarChar(40)
+  startedAt             DateTime @map("started_at") @db.Timestamptz
+  endedAt               DateTime @map("ended_at") @db.Timestamptz
+  durationSeconds       Int      @map("duration_seconds")
+  movingDurationSeconds Int      @map("moving_duration_seconds")
+  pausedDurationSeconds Int      @default(0) @map("paused_duration_seconds")
+  distanceMeters        Decimal  @map("distance_meters") @db.Decimal(10, 2)
+  stepCount             Int      @map("step_count")
+  collectedCount        Int      @default(0) @map("collected_count")
+  autoFinished          Boolean  @default(false) @map("auto_finished")
+  autoFinishReason      String?  @map("auto_finish_reason")
+  pathPointCount        Int      @map("path_point_count")
+  pathGeojson           Json     @map("path_geojson")
+  pauseIntervals        Json?    @map("pause_intervals")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collections UserCollection[]
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@map("walk_sessions")
+}
+
 model UserCollection {
   id                         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId                     String   @map("user_id") @db.Uuid
@@ -125,13 +154,18 @@ model UserCollection {
   movementData               Json?    @map("movement_data")
   pointsEarned               Int      @default(0) @map("points_earned")
   idempotencyKey             String?  @map("idempotency_key") @db.VarChar(128)
+  walkClientId               String?  @map("walk_client_id") @db.Uuid
+  walkSessionId              String?  @map("walk_session_id") @db.Uuid
 
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entity GameEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity      GameEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  walkSession WalkSession? @relation(fields: [walkSessionId], references: [id], onDelete: Restrict)
 
   @@unique([userId, entityId], name: "unique_user_entity_collection")
   @@unique([userId, idempotencyKey], name: "unique_user_idempotency")
   @@index([userId, collectedAt(sort: Desc)])
   @@index([entityId, collectedAt(sort: Desc)])
+  @@index([walkClientId])
+  @@index([walkSessionId])
   @@map("user_collections")
 }

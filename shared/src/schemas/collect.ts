@@ -6,6 +6,7 @@ import { movementSampleSchema, movementSummarySchema } from './movement.js';
 export const collectRequestSchema = z
   .object({
     entityId: uuidSchema,
+    walkSessionId: uuidSchema.optional(),
     location: locationSchema,
     summary: movementSummarySchema,
     samples: z.array(movementSampleSchema).max(600).optional(),
@@ -26,6 +27,7 @@ export const collectResponseSchema = z.object({
   collection: z.object({
     id: uuidSchema,
     entityId: uuidSchema,
+    walkSessionId: uuidSchema,
     collectedAt: timestampSchema,
     distanceFromEntityMeters: z.number().min(0),
     movementValidated: z.boolean(),

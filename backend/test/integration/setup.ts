@@ -12,6 +12,7 @@ import { redis } from '../../src/redis.js';
 
 export async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE user_collections RESTART IDENTITY CASCADE`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE walk_sessions RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE game_entities RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE user_stats RESTART IDENTITY CASCADE`);
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE sessions RESTART IDENTITY CASCADE`);

@@ -177,6 +177,16 @@ Save this URL — you’ll use it in the mobile app.
 
 If `/ready` is **503**, read the JSON error — usually wrong `DATABASE_URL` / `REDIS_URL` or DB not ready yet (wait 1 minute, redeploy).
 
+**Recorded-walk API check after the walk-recording deploy:**
+
+- The mobile app syncs completed walks to `POST /api/v1/walks`.
+- If Walks shows `Route not found: POST /api/v1/walks`, Railway is still
+  running an older backend revision.
+- After pushing the walk-recording backend changes, confirm the deploy ran
+  `prisma migrate deploy` and applied `20260428000000_walk_sessions`.
+- Then reopen the app or the Walks screen; local `failed` walk sync rows should
+  retry and move to `synced`.
+
 ---
 
 ## Step 10 — Seed game markers (manual, when you want)
@@ -226,6 +236,7 @@ In Railway: connect **deploy triggers** to **`main`** (or your branch) so every 
 | Build fails: `prisma generate` | Ensure **backend** workspace is named `@parkwalk/backend` in `package.json` and build runs `-w backend`. |
 | `/ready` 503 | Wrong or missing `DATABASE_URL` / `REDIS_URL`; Postgres/Redis not up. |
 | `migrate deploy` fails on `postgis` | Rare — Railway Postgres should allow extensions; check Railway docs or support. |
+| Walk sync says `Route not found: POST /api/v1/walks` | Railway is running an older backend without the walk router; push/deploy the walk-recording changes. |
 | App: network error | Typo in `API_BASE_URL`; must be **https**; no trailing slash issues; service not public. |
 
 ---
