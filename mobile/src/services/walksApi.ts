@@ -17,7 +17,7 @@ export async function syncWalk(request: SyncWalkRequest): Promise<WalkSession> {
   return data.walk;
 }
 
-export async function fetchWalks(): Promise<Omit<WalkSession, 'path'>[]> {
+export async function fetchWalks(): Promise<Omit<WalkSession, 'pathSegments'>[]> {
   const { data } = await api.get<WalkListResponse>('/api/v1/walks');
   return data.items;
 }

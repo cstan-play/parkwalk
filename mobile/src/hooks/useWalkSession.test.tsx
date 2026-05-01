@@ -126,7 +126,7 @@ function activeWalkSession(): LocalWalkSession {
     pauseIntervals: [],
     activeStepIntervals: [],
     currentStepIntervalStartedAt: '2026-04-29T10:00:00.000Z',
-    path: [],
+    pathSegments: [],
     distanceMeters: 0,
     stepCount: 0,
     collectedEntityIds: [],

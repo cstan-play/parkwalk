@@ -57,6 +57,9 @@ Key principles:
   profile after sync.
 - Full GPS paths may be stored in the cloud database during Alpha.
 - Pause/resume is part of V1.
+- Pause/resume route rendering must preserve separate walked segments. ParkWalk
+  must not draw a connecting line through a pause gap if the user resumes from a
+  different location.
 - Auto-finish is part of V1, using conservative inactivity rules.
 - Background and screen-lock recording are required.
 - Walk data should become a foundation for profile stats, streaks, later
@@ -75,6 +78,8 @@ Key principles:
 - One active walk per user/device at a time.
 - Collectibles can only be collected during an active, non-paused walk.
 - Live route line on the map.
+- Live route line is rendered as one or more route segments, with visual gaps
+  across paused time.
 - Live elapsed moving/total time.
 - Live distance.
 - Live step count from `CMPedometer`.
@@ -120,9 +125,25 @@ iPhone:
 10. End Walk opens the local Walk Detail screen immediately.
 11. Walk History exposes sync failure messages under failed rows.
 
+Latest route-segmentation update:
+
+1. The shared walk contract now stores `pathSegments` instead of one continuous
+   `path` array.
+2. Mobile local walk storage was bumped from `parkwalk.walk_sessions.v2` to
+   `parkwalk.walk_sessions.v3`. Previous Alpha walk history is intentionally
+   discarded on hydrate for this schema reset.
+3. Start Walk opens the first segment. Pause closes the current segment. Resume
+   opens a new segment seeded with the current location when available.
+4. Active and detail maps render a Mapbox `MultiLineString`, so a pause/resume
+   gap is not displayed as walked distance.
+5. Backend storage moved from `path_geojson` to `path_segments` JSONB. Migration
+   `20260501000000_walk_path_segments` clears old `walk_sessions` rows and
+   detaches old collection rows from those walk ids during Alpha.
+
 Still needs validation after deployment:
 
-- Railway migration/deploy validation for the new `walk_sessions` table.
+- Railway migration/deploy validation for `20260428000000_walk_sessions` and
+  `20260501000000_walk_path_segments`.
 - Hosted `POST /api/v1/walks`, `GET /api/v1/walks`, and `GET
   /api/v1/walks/:id` routes.
 - Existing on-device `failed` walk sync rows should retry to `synced` after
@@ -170,6 +191,8 @@ Still needs validation after deployment:
 - Show **Resume** and **End**.
 - Stop adding distance/path points while paused.
 - Continue preserving the existing route.
+- Close the current path segment on Pause and start a new segment on Resume.
+  The Walk Detail map should show both segments but leave a gap between them.
 - Stop the live pedometer subscription while paused.
 - Record active pedometer intervals so final step totals exclude paused windows.
 
@@ -459,16 +482,25 @@ model WalkSession {
   autoFinished        Boolean   @default(false) @map("auto_finished")
   autoFinishReason    String?   @map("auto_finish_reason")
   pathPointCount      Int       @map("path_point_count")
-  pathEncoded         String?   @map("path_encoded")
-  pathGeojson         Json?     @map("path_geojson")
+  pathSegments        Json      @map("path_segments")
   pauseIntervals      Json?     @map("pause_intervals")
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 }
 ```
 
-For V1, prefer storing full path as encoded polyline or JSONB on the session.
-PostGIS `LineString` can be added later if route analytics become important.
+For Alpha V1, store full route segments as JSONB on the session. The shape is:
+
+```ts
+type WalkPathSegment = {
+  startedAt: string;
+  endedAt: string;
+  points: WalkPathPoint[];
+};
+```
+
+PostGIS `LineString`/`MultiLineString` can be added later if route analytics
+become important.
 
 Collections should gain a nullable `walk_session_id` so successful collect rows
 can be tied to the active walk.

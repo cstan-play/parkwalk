@@ -1,3 +1,4 @@
+import type { SyncWalkRequest } from '@parkwalk/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
@@ -16,10 +17,10 @@ jest.mock('@/native/Pedometer', () => ({
 }));
 
 jest.mock('@/services/walksApi', () => ({
-  syncWalk: jest.fn(async (request) => ({
+  syncWalk: jest.fn(async (request: SyncWalkRequest) => ({
     ...request,
     id: '11111111-1111-4111-8111-111111111111',
-    pathPointCount: request.path.length,
+    pathPointCount: request.pathSegments.reduce((sum, segment) => sum + segment.points.length, 0),
     createdAt: request.endedAt,
     updatedAt: request.endedAt,
   })),
@@ -65,7 +66,7 @@ describe('walkSessionStore stabilization behavior', () => {
       autoFinished: false,
       autoFinishReason: null,
       pathPointCount: 0,
-      path: [],
+      pathSegments: [],
       pauseIntervals: [],
       createdAt: '2026-04-29T10:01:00.000Z',
       updatedAt: '2026-04-29T10:01:00.000Z',
@@ -124,7 +125,7 @@ describe('walkSessionStore stabilization behavior', () => {
     );
   });
 
-  it('scopes persisted walks by authenticated owner', async () => {
+  it('scopes new persisted walks by owner and drops previous alpha storage', async () => {
     await AsyncStorage.setItem(
       'parkwalk.walk_sessions.v1',
       JSON.stringify({
@@ -141,6 +142,14 @@ describe('walkSessionStore stabilization behavior', () => {
         completedSessions: [],
       }),
     );
+    await AsyncStorage.setItem(
+      'parkwalk.walk_sessions.v3.user-a',
+      JSON.stringify({
+        ownerId: 'user-a',
+        activeSession: activeSession({ clientId: 'fresh-user-a-walk' }),
+        completedSessions: [],
+      }),
+    );
 
     await useWalkSessionStore.getState().hydrate('user-b');
 
@@ -150,8 +159,9 @@ describe('walkSessionStore stabilization behavior', () => {
 
     await useWalkSessionStore.getState().hydrate('user-a');
 
-    expect(useWalkSessionStore.getState().activeSession?.clientId).toBe('user-a-walk');
+    expect(useWalkSessionStore.getState().activeSession?.clientId).toBe('fresh-user-a-walk');
     expect(useWalkSessionStore.getState().recoveryPromptPending).toBe(true);
+    expect(await AsyncStorage.getItem('parkwalk.walk_sessions.v2.user-a')).toBeNull();
   });
 
   it('does not persist on every native step update', async () => {
@@ -207,6 +217,66 @@ describe('walkSessionStore stabilization behavior', () => {
         durationSeconds: 240,
         movingDurationSeconds: 120,
         pausedDurationSeconds: 120,
+      }),
+    );
+  });
+
+  it('stores pause and resume paths as separate route segments', async () => {
+    await useWalkSessionStore.getState().startWalk(baseLocation);
+    await useWalkSessionStore.getState().recordMovementSample({
+      timestamp: '2026-04-29T10:00:10.000Z',
+      location: { latitude: 55.6762, longitude: 12.5683, accuracy: 5 },
+      speedMps: 1.2,
+      stepCountDelta: 10,
+    });
+
+    setNow('2026-04-29T10:01:00.000Z');
+    await useWalkSessionStore.getState().pauseWalk();
+
+    setNow('2026-04-29T10:03:00.000Z');
+    await useWalkSessionStore.getState().resumeWalk({
+      latitude: 55.677,
+      longitude: 12.569,
+      accuracy: 5,
+    });
+    await useWalkSessionStore.getState().recordMovementSample({
+      timestamp: '2026-04-29T10:03:10.000Z',
+      location: { latitude: 55.6771, longitude: 12.569, accuracy: 5 },
+      speedMps: 1.2,
+      stepCountDelta: 10,
+    });
+
+    const active = useWalkSessionStore.getState().activeSession;
+    expect(active?.pathSegments).toHaveLength(2);
+    expect(active?.pathSegments[0]?.endedAt).toBe('2026-04-29T10:01:00.000Z');
+    expect(active?.pathSegments[0]?.points).toHaveLength(2);
+    expect(active?.pathSegments[1]?.startedAt).toBe('2026-04-29T10:03:00.000Z');
+    expect(active?.pathSegments[1]?.points).toHaveLength(2);
+
+    setNow('2026-04-29T10:04:00.000Z');
+    await useWalkSessionStore.getState().endWalk();
+    await flushPromises();
+
+    expect(mockedSyncWalk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathSegments: [
+          expect.objectContaining({
+            startedAt: '2026-04-29T10:00:00.000Z',
+            endedAt: '2026-04-29T10:01:00.000Z',
+            points: expect.arrayContaining([
+              expect.objectContaining({ latitude: 55.6761 }),
+              expect.objectContaining({ latitude: 55.6762 }),
+            ]),
+          }),
+          expect.objectContaining({
+            startedAt: '2026-04-29T10:03:00.000Z',
+            endedAt: '2026-04-29T10:04:00.000Z',
+            points: expect.arrayContaining([
+              expect.objectContaining({ latitude: 55.677 }),
+              expect.objectContaining({ latitude: 55.6771 }),
+            ]),
+          }),
+        ],
       }),
     );
   });
@@ -283,7 +353,7 @@ function completedSession(overrides: Partial<LocalWalkSession>): LocalWalkSessio
     endedAt: '2026-04-29T09:10:00.000Z',
     pauseIntervals: [],
     activeStepIntervals: [],
-    path: [],
+    pathSegments: [],
     distanceMeters: 0,
     stepCount: 0,
     collectedEntityIds: [],

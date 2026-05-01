@@ -1,9 +1,9 @@
+import type { WalkSession } from '@parkwalk/shared';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import React, { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { WalkSession } from '@parkwalk/shared';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { fetchWalks } from '@/services/walksApi';
@@ -67,7 +67,7 @@ export function WalkHistoryScreen(): JSX.Element {
 
 function mergeWalks(
   local: LocalWalkSession[],
-  remote: Omit<WalkSession, 'path'>[],
+  remote: Omit<WalkSession, 'pathSegments'>[],
 ): WalkRow[] {
   const byClientId = new Map<string, WalkRow>();
   for (const item of remote) {

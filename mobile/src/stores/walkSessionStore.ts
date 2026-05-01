@@ -1,4 +1,10 @@
-import type { Location, MovementSample, SyncWalkRequest, WalkPathPoint } from '@parkwalk/shared';
+import type {
+  Location,
+  MovementSample,
+  SyncWalkRequest,
+  WalkPathPoint,
+  WalkPathSegment,
+} from '@parkwalk/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
@@ -8,7 +14,8 @@ import { describeApiError } from '@/util/describeApiError';
 import { haversineMeters } from '@/util/geo';
 
 const LEGACY_STORAGE_KEY = 'parkwalk.walk_sessions.v1';
-const STORAGE_KEY_PREFIX = 'parkwalk.walk_sessions.v2';
+const PREVIOUS_STORAGE_KEY_PREFIX = 'parkwalk.walk_sessions.v2';
+const STORAGE_KEY_PREFIX = 'parkwalk.walk_sessions.v3';
 const MAX_ACCURACY_METERS = 50;
 const MIN_SEGMENT_METERS = 2;
 const IMPOSSIBLE_SPEED_MPS = 8;
@@ -30,13 +37,19 @@ export interface WalkStepInterval {
   endedAt: string;
 }
 
+export interface LocalWalkPathSegment {
+  startedAt: string;
+  endedAt?: string;
+  points: WalkPathPoint[];
+}
+
 export interface LocalWalkSession {
   clientId: string;
   status: ActiveWalkStatus | CompletedWalkStatus;
   startedAt: string;
   endedAt?: string;
   pauseIntervals: WalkPauseInterval[];
-  path: WalkPathPoint[];
+  pathSegments: LocalWalkPathSegment[];
   distanceMeters: number;
   stepCount: number;
   collectedEntityIds: string[];
@@ -67,7 +80,7 @@ interface WalkSessionState extends PersistedState {
   clearRecoveryPrompt: () => void;
   startWalk: (initialLocation?: Location | null) => Promise<void>;
   pauseWalk: () => Promise<void>;
-  resumeWalk: () => Promise<void>;
+  resumeWalk: (initialLocation?: Location | null) => Promise<void>;
   endWalk: (opts?: { auto?: boolean; reason?: string; recovered?: boolean; endedAt?: string }) => Promise<LocalWalkSession | null>;
   discardActiveWalk: () => Promise<void>;
   recordMovementSample: (sample: MovementSample) => Promise<void>;
@@ -92,10 +105,8 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     const normalizedOwnerId = ownerId ?? null;
     if (get().hydrated && get().ownerId === normalizedOwnerId) return;
     try {
+      await removePreviousWalkStorage(normalizedOwnerId);
       const raw = await AsyncStorage.getItem(storageKeyForOwner(normalizedOwnerId));
-      if (normalizedOwnerId) {
-        await AsyncStorage.removeItem(LEGACY_STORAGE_KEY);
-      }
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedState>;
         const activeSession = parsed.activeSession ? normalizeLocalSession(parsed.activeSession) : null;
@@ -125,13 +136,13 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
   startWalk: async (initialLocation) => {
     if (get().activeSession) return;
     const now = new Date().toISOString();
-    const path = initialLocation ? [toPathPoint(initialLocation, now, 0)] : [];
+    const initialPoint = initialLocation ? toPathPoint(initialLocation, now, 0) : null;
     const activeSession: LocalWalkSession = {
       clientId: createUuid(),
       status: 'active',
       startedAt: now,
       pauseIntervals: [],
-      path,
+      pathSegments: [{ startedAt: now, points: initialPoint ? [initialPoint] : [] }],
       distanceMeters: 0,
       stepCount: 0,
       collectedEntityIds: [],
@@ -153,10 +164,12 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     if (!session || session.status !== 'active') return;
     const now = new Date().toISOString();
     const activeStepIntervals = closeActiveStepInterval(session, now);
+    const pathSegments = closeActivePathSegment(session.pathSegments, now);
     set({
       activeSession: {
         ...session,
         status: 'paused',
+        pathSegments,
         activeStepIntervals,
         currentStepIntervalStartedAt: undefined,
         nativeStepBase: session.stepCount,
@@ -167,10 +180,11 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     await persist(get());
   },
 
-  resumeWalk: async () => {
+  resumeWalk: async (initialLocation) => {
     const session = get().activeSession;
     if (!session || session.status !== 'paused') return;
     const now = new Date().toISOString();
+    const initialPoint = initialLocation ? toPathPoint(initialLocation, now, session.stepCount) : null;
     const pauseIntervals = session.pauseIntervals.map((interval, index) =>
       index === session.pauseIntervals.length - 1 && !interval.endedAt
         ? { ...interval, endedAt: now }
@@ -181,6 +195,10 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
         ...session,
         status: 'active',
         pauseIntervals,
+        pathSegments: [
+          ...session.pathSegments,
+          { startedAt: now, points: initialPoint ? [initialPoint] : [] },
+        ],
         lastMovementAt: now,
         lastAutoPromptAt: undefined,
         currentStepIntervalStartedAt: now,
@@ -196,6 +214,10 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     const endedAt = opts?.endedAt ?? new Date().toISOString();
     const stepIntervals =
       session.status === 'active' ? closeActiveStepInterval(session, endedAt) : session.activeStepIntervals;
+    const pathSegments =
+      session.status === 'active'
+        ? closeActivePathSegment(session.pathSegments, endedAt)
+        : session.pathSegments;
     const pauseIntervals =
       session.status === 'paused'
         ? session.pauseIntervals.map((interval, index) =>
@@ -209,6 +231,7 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       status: opts?.recovered ? 'recovered_after_termination' : opts?.auto ? 'auto_completed' : 'completed',
       endedAt,
       pauseIntervals,
+      pathSegments,
       activeStepIntervals: stepIntervals,
       currentStepIntervalStartedAt: undefined,
       currentNativeIntervalSteps: 0,
@@ -239,9 +262,12 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       ? session.stepCount
       : session.stepCount + Math.max(0, sample.stepCountDelta ?? 0);
     const point = toPathPoint(sample.location, sample.timestamp, nextStepCount);
-    const accepted = acceptPathPoint(session, point, sample);
-    const nextPath = accepted ? [...session.path, point] : session.path;
-    const lastPoint = session.path[session.path.length - 1];
+    const currentSegment = getCurrentPathSegment(session);
+    const lastPoint = currentSegment?.points[currentSegment.points.length - 1];
+    const accepted = acceptPathPoint(lastPoint, point, sample);
+    const nextPathSegments = accepted
+      ? appendPathPoint(session.pathSegments, sample.timestamp, point)
+      : session.pathSegments;
     const segmentMeters = accepted && lastPoint ? haversineMeters(lastPoint, point) : 0;
     const movedBySteps = (sample.stepCountDelta ?? 0) > 0;
     const movedBySpeed = typeof sample.speedMps === 'number' && sample.speedMps > 0.3;
@@ -250,7 +276,7 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     set({
       activeSession: {
         ...session,
-        path: nextPath,
+        pathSegments: nextPathSegments,
         distanceMeters: session.distanceMeters + segmentMeters,
         stepCount: nextStepCount,
         lastMovementAt,
@@ -363,6 +389,35 @@ function closeActiveStepInterval(session: LocalWalkSession, endedAt: string): Wa
   return [...session.activeStepIntervals, { startedAt, endedAt }];
 }
 
+function closeActivePathSegment(
+  segments: LocalWalkPathSegment[],
+  endedAt: string,
+): LocalWalkPathSegment[] {
+  const last = segments[segments.length - 1];
+  if (!last || last.endedAt) return segments;
+  return segments.map((segment, index) =>
+    index === segments.length - 1 ? { ...segment, endedAt } : segment,
+  );
+}
+
+function getCurrentPathSegment(session: LocalWalkSession): LocalWalkPathSegment | null {
+  return session.pathSegments[session.pathSegments.length - 1] ?? null;
+}
+
+function appendPathPoint(
+  segments: LocalWalkPathSegment[],
+  startedAt: string,
+  point: WalkPathPoint,
+): LocalWalkPathSegment[] {
+  const last = segments[segments.length - 1];
+  if (!last || last.endedAt) {
+    return [...segments, { startedAt, points: [point] }];
+  }
+  return segments.map((segment, index) =>
+    index === segments.length - 1 ? { ...segment, points: [...segment.points, point] } : segment,
+  );
+}
+
 async function finalizeCompletedWalk(
   clientId: string,
   stepIntervals: WalkStepInterval[],
@@ -419,12 +474,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 function acceptPathPoint(
-  session: LocalWalkSession,
+  previous: WalkPathPoint | undefined,
   point: WalkPathPoint,
   sample: MovementSample,
 ): boolean {
   if (typeof point.accuracy === 'number' && point.accuracy > MAX_ACCURACY_METERS) return false;
-  const previous = session.path[session.path.length - 1];
   if (!previous) return true;
   const segmentMeters = haversineMeters(previous, point);
   if (segmentMeters < MIN_SEGMENT_METERS) return false;
@@ -456,9 +510,22 @@ function toSyncRequest(session: LocalWalkSession): SyncWalkRequest {
     collectedCount: session.collectedEntityIds.length,
     autoFinished: !!session.autoFinished,
     autoFinishReason: session.autoFinishReason ?? null,
-    path: session.path,
+    pathSegments: toClosedPathSegments(session.pathSegments, endedAt),
     pauseIntervals: closedPauses,
   };
+}
+
+function toClosedPathSegments(
+  segments: LocalWalkPathSegment[],
+  fallbackEndedAt: string,
+): WalkPathSegment[] {
+  return segments
+    .filter((segment) => segment.points.length > 0)
+    .map((segment) => ({
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt ?? fallbackEndedAt,
+      points: segment.points,
+    }));
 }
 
 async function persist(state: PersistedState): Promise<void> {
@@ -490,6 +557,16 @@ function schedulePersist(get: () => PersistedState): void {
 
 function storageKeyForOwner(ownerId: string | null): string {
   return ownerId ? `${STORAGE_KEY_PREFIX}.${ownerId}` : `${STORAGE_KEY_PREFIX}.anonymous`;
+}
+
+async function removePreviousWalkStorage(ownerId: string | null): Promise<void> {
+  const oldKeys = [
+    LEGACY_STORAGE_KEY,
+    `${PREVIOUS_STORAGE_KEY_PREFIX}.anonymous`,
+    `${PREVIOUS_STORAGE_KEY_PREFIX}.authenticated`,
+  ];
+  if (ownerId) oldKeys.push(`${PREVIOUS_STORAGE_KEY_PREFIX}.${ownerId}`);
+  await Promise.all(oldKeys.map((key) => AsyncStorage.removeItem(key)));
 }
 
 export function getClosedPauseIntervals(
@@ -529,6 +606,7 @@ function retainCompletedSessions(sessions: LocalWalkSession[]): LocalWalkSession
 function normalizeLocalSession(session: LocalWalkSession): LocalWalkSession {
   return {
     ...session,
+    pathSegments: session.pathSegments ?? [],
     activeStepIntervals: session.activeStepIntervals ?? [],
     currentStepIntervalStartedAt:
       session.currentStepIntervalStartedAt ??

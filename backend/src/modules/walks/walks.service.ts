@@ -19,7 +19,7 @@ type WalkRow = {
   autoFinished: boolean;
   autoFinishReason: string | null;
   pathPointCount: number;
-  pathGeojson: Prisma.JsonValue;
+  pathSegments: Prisma.JsonValue;
   pauseIntervals: Prisma.JsonValue | null;
   createdAt: Date;
   updatedAt: Date;
@@ -75,14 +75,14 @@ export async function syncWalk(userId: string, request: SyncWalkRequest): Promis
   return toWalkSession(walk);
 }
 
-export async function listWalks(userId: string): Promise<Omit<WalkSession, 'path'>[]> {
+export async function listWalks(userId: string): Promise<Omit<WalkSession, 'pathSegments'>[]> {
   const rows = await prisma.walkSession.findMany({
     where: { userId },
     orderBy: { startedAt: 'desc' },
     take: 100,
   });
   return rows.map((row) => {
-    const { path: _path, ...rest } = toWalkSession(row);
+    const { pathSegments: _pathSegments, ...rest } = toWalkSession(row);
     return rest;
   });
 }
@@ -109,7 +109,9 @@ function toWalkSession(row: WalkRow): WalkSession {
     autoFinished: row.autoFinished,
     autoFinishReason: row.autoFinishReason,
     pathPointCount: row.pathPointCount,
-    path: Array.isArray(row.pathGeojson) ? (row.pathGeojson as WalkSession['path']) : [],
+    pathSegments: Array.isArray(row.pathSegments)
+      ? (row.pathSegments as WalkSession['pathSegments'])
+      : [],
     pauseIntervals: Array.isArray(row.pauseIntervals)
       ? (row.pauseIntervals as WalkSession['pauseIntervals'])
       : [],
@@ -131,8 +133,8 @@ function toPersistedWalk(request: SyncWalkRequest) {
     collectedCount: request.collectedCount,
     autoFinished: request.autoFinished,
     autoFinishReason: request.autoFinishReason ?? null,
-    pathPointCount: request.path.length,
-    pathGeojson: request.path,
+    pathPointCount: request.pathSegments.reduce((sum, segment) => sum + segment.points.length, 0),
+    pathSegments: request.pathSegments,
     pauseIntervals: request.pauseIntervals,
   };
 }

@@ -1,10 +1,10 @@
-import MapboxGL from '@rnmapbox/maps';
+import type { WalkSession } from '@parkwalk/shared';
 import { useRoute, type RouteProp } from '@react-navigation/native';
+import MapboxGL from '@rnmapbox/maps';
 import { useQuery } from '@tanstack/react-query';
+import type { Position } from 'geojson';
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { Position } from 'geojson';
-import type { WalkSession } from '@parkwalk/shared';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { fetchWalk } from '@/services/walksApi';
@@ -26,22 +26,24 @@ export function WalkDetailScreen(): JSX.Element {
   });
 
   const walk = localWalk ?? remote.data ?? null;
-  const coordinates = useMemo<Position[]>(() => {
-    if (!walk || walk.path.length < 2) return [];
-    return walk.path.map((point) => [point.longitude, point.latitude]);
+  const coordinates = useMemo<Position[][]>(() => {
+    if (!walk) return [];
+    return walk.pathSegments
+      .map((segment) => segment.points.map((point) => [point.longitude, point.latitude] as Position))
+      .filter((segment) => segment.length >= 2);
   }, [walk]);
   const shape = useMemo(
     () =>
-      coordinates.length >= 2
+      coordinates.length > 0
         ? ({
             type: 'Feature',
             properties: {},
-            geometry: { type: 'LineString', coordinates },
+            geometry: { type: 'MultiLineString', coordinates },
           } as const)
         : null,
     [coordinates],
   );
-  const center = coordinates[0] ?? ([-122.4194, 37.7749] as Position);
+  const center = coordinates[0]?.[0] ?? ([-122.4194, 37.7749] as Position);
 
   if (!walk) {
     return (

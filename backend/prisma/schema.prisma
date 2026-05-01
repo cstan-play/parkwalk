@@ -129,7 +129,7 @@ model WalkSession {
   autoFinished          Boolean  @default(false) @map("auto_finished")
   autoFinishReason      String?  @map("auto_finish_reason")
   pathPointCount        Int      @map("path_point_count")
-  pathGeojson           Json     @map("path_geojson")
+  pathSegments           Json     @map("path_segments")
   pauseIntervals        Json?    @map("pause_intervals")
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz

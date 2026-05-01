@@ -16,6 +16,13 @@ export const walkPathPointSchema = locationSchema.extend({
 });
 export type WalkPathPoint = z.infer<typeof walkPathPointSchema>;
 
+export const walkPathSegmentSchema = z.object({
+  startedAt: timestampSchema,
+  endedAt: timestampSchema,
+  points: z.array(walkPathPointSchema).max(20_000),
+});
+export type WalkPathSegment = z.infer<typeof walkPathSegmentSchema>;
+
 export const walkPauseIntervalSchema = z.object({
   startedAt: timestampSchema,
   endedAt: timestampSchema,
@@ -37,7 +44,7 @@ export const walkSessionSchema = z.object({
   autoFinished: z.boolean(),
   autoFinishReason: z.string().nullable(),
   pathPointCount: z.number().int().min(0),
-  path: z.array(walkPathPointSchema),
+  pathSegments: z.array(walkPathSegmentSchema),
   pauseIntervals: z.array(walkPauseIntervalSchema),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
@@ -58,7 +65,7 @@ export const syncWalkRequestSchema = z
     collectedCount: z.number().int().min(0).default(0),
     autoFinished: z.boolean().default(false),
     autoFinishReason: z.string().max(120).nullable().optional(),
-    path: z.array(walkPathPointSchema).max(20_000),
+    pathSegments: z.array(walkPathSegmentSchema).max(500),
     pauseIntervals: z.array(walkPauseIntervalSchema).max(500).default([]),
   })
   .strict();
@@ -70,7 +77,7 @@ export const syncWalkResponseSchema = z.object({
 export type SyncWalkResponse = z.infer<typeof syncWalkResponseSchema>;
 
 export const walkListResponseSchema = z.object({
-  items: z.array(walkSessionSchema.omit({ path: true })),
+  items: z.array(walkSessionSchema.omit({ pathSegments: true })),
 });
 export type WalkListResponse = z.infer<typeof walkListResponseSchema>;
 

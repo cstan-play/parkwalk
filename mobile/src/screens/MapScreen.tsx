@@ -217,17 +217,19 @@ export function MapScreen(): JSX.Element {
   const nowIso = useMemo(() => new Date(nowTick).toISOString(), [nowTick]);
   const movingSeconds = activeWalk ? getMovingDurationSeconds(activeWalk, nowIso) : 0;
   const pausedSeconds = activeWalk ? getPausedDurationSeconds(activeWalk.pauseIntervals, nowIso) : 0;
-  const routeCoordinates = useMemo<Position[]>(() => {
-    if (!activeWalk || activeWalk.path.length < 2) return [];
-    return activeWalk.path.map((point) => [point.longitude, point.latitude]);
+  const routeCoordinates = useMemo<Position[][]>(() => {
+    if (!activeWalk) return [];
+    return activeWalk.pathSegments
+      .map((segment) => segment.points.map((point) => [point.longitude, point.latitude] as Position))
+      .filter((segment) => segment.length >= 2);
   }, [activeWalk]);
   const routeShape = useMemo(
     () =>
-      routeCoordinates.length >= 2
+      routeCoordinates.length > 0
         ? ({
             type: 'Feature',
             properties: {},
-            geometry: { type: 'LineString', coordinates: routeCoordinates },
+            geometry: { type: 'MultiLineString', coordinates: routeCoordinates },
           } as const)
         : null,
     [routeCoordinates],
@@ -347,7 +349,7 @@ export function MapScreen(): JSX.Element {
               <Pressable
                 accessibilityRole="button"
                 style={styles.primaryWalkButton}
-                onPress={() => void resumeWalk()}
+                onPress={() => void resumeWalk(movement.latest?.location ?? null)}
               >
                 <Text style={styles.primaryWalkButtonText}>Resume</Text>
               </Pressable>

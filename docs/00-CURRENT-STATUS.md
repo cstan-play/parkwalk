@@ -1,6 +1,6 @@
 # Current Project Status
 
-Last reviewed: 2026-04-29.
+Last reviewed: 2026-05-01.
 
 ## Where The Project Is
 
@@ -49,7 +49,9 @@ The current goal is not feature expansion. The goal is to prove the core loop:
   with an on-map recovery panel, scopes local walk storage by authenticated
   user, shows moving time separately from paused time, opens the local Walk
   Detail screen immediately after End Walk, and exposes sync failure messages in
-  Walks.
+  Walks. Route storage is being reset for Alpha to `pathSegments`, so Pause
+  closes one route segment and Resume starts another; maps render the walk as a
+  `MultiLineString` instead of drawing a false line through paused time.
 
 ## Latest Field-Test Result
 
@@ -65,19 +67,20 @@ Manual `ParkWalkRelease` testing on iPhone passed the core recorded-walk loop:
 - Screen-lock walk plus pedometer backfill is plausible.
 - Field diagnostics can be expanded/collapsed without freezing the UI.
 
-The remaining failed check is cloud sync against Railway: completed local walks
-show `Route not found: POST /api/v1/walks`. The route exists in local backend
-code, so this means Railway is still running a backend revision that does not
-include the walk API. After pushing to `main` and Railway deploying the new
-backend, existing local `failed` walk sync entries should retry and become
-`synced`.
+Cloud sync became available after the walk API deploy. The next local build
+should validate the new route-segment schema reset: old Alpha walks are
+discarded locally and deleted from `walk_sessions` by the backend migration, and
+newly completed walks should sync with `path_segments`.
 
 ## Known Limits
 
 - Raw accelerometer step detection is not reliable when iOS suspends the stream
   in pocket/background/locked-screen scenarios.
-- Railway production does not yet have the walk sync route until these changes
-  are pushed and deployed; local walks remain saved on-device and retry sync.
+- Railway production does not yet have the route-segment migration until these
+  changes are pushed and deployed; local walks remain saved on-device and retry
+  sync.
+- Previous Alpha walk history is intentionally not preserved during the
+  `pathSegments` reset.
 - `CMMotionActivity` and HealthKit are not wired yet.
 - Offline Mapbox tile packs and walkable-way snapping are not implemented.
 - The mobile auth store restores tokens after app start, but not the full user
@@ -119,10 +122,11 @@ Use `docs/12-FIRST-WALK.md` as the checklist.
 ### Alpha P0 — Native Motion Reliability
 
 - Deploy and verify cloud sync for recorded walks:
-  - Railway applies `20260428000000_walk_sessions`.
+  - Railway applies `20260428000000_walk_sessions` and
+    `20260501000000_walk_path_segments`.
   - `POST /api/v1/walks`, `GET /api/v1/walks`, and `GET /api/v1/walks/:id`
     are reachable on the hosted API.
-  - existing on-device `failed` walk sync rows retry to `synced`.
+  - new on-device walks sync to `synced` with segmented route storage.
 - Continue recorded walk sessions with manual **Start Walk** / **End Walk**,
   **Pause** / **Resume**, auto-finish, visible path trace, elapsed time,
   distance, and native `CMPedometer` step count. Walks are offline-first locally
