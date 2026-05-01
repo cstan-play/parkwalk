@@ -1,7 +1,7 @@
 import type { GameEntity } from '@parkwalk/shared';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MapboxGL from '@rnmapbox/maps';
+import MapboxGL, { type Camera as MapboxCamera, type MapState } from '@rnmapbox/maps';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Position } from 'geojson';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +27,8 @@ import { haversineMeters } from '@/util/geo';
 // distance to an entity; prevents inflated-uncertainty "teleport" collects.
 const MAX_ACCURACY_TOLERANCE_M = 35;
 const DEFAULT_CENTER_COORDINATE: Position = [-122.4194, 37.7749];
+const INITIAL_MAP_ZOOM = 16;
+const RECENTER_ANIMATION_MS = 550;
 const SHOW_FIELD_DIAGNOSTICS = __DEV__ || Config.FIELD_DEBUG_OVERLAY === 'true';
 
 type VisibleBounds = { ne: Position; sw: Position };
@@ -47,7 +49,14 @@ export function MapScreen(): JSX.Element {
   const movement = useMovementDetection();
   useWalkSession(movement);
   const navigation = useNavigation<Nav>();
+  const cameraRef = useRef<MapboxCamera>(null);
   const isFollowingUserRef = useRef(true);
+  const cameraStateRef = useRef({
+    zoom: INITIAL_MAP_ZOOM,
+    heading: 0,
+    pitch: 0,
+  });
+  const visibleBoundsRef = useRef<VisibleBounds | null>(null);
   const [lastLocation, setLastLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [collectUi, setCollectUi] = useState<CollectUiState>({ kind: 'idle' });
   const [isFollowingUser, setIsFollowingUser] = useState(true);
@@ -121,6 +130,42 @@ export function MapScreen(): JSX.Element {
     },
     [latestUserCoordinate],
   );
+
+  useEffect(() => {
+    const bounds = visibleBoundsRef.current;
+    if (bounds) updateRecenterVisibility(bounds);
+  }, [latestUserCoordinate, updateRecenterVisibility]);
+
+  const handleCameraChanged = useCallback(
+    (state: MapState) => {
+      cameraStateRef.current = {
+        zoom: state.properties.zoom,
+        heading: state.properties.heading,
+        pitch: state.properties.pitch,
+      };
+      const bounds = toVisibleBounds(state.properties.bounds);
+      if (bounds) visibleBoundsRef.current = bounds;
+      const following = state.gestures?.isGestureActive ? false : isFollowingUserRef.current;
+      if (state.gestures?.isGestureActive) setFollowingUser(false);
+      if (bounds) updateRecenterVisibility(bounds, following);
+    },
+    [setFollowingUser, updateRecenterVisibility],
+  );
+
+  const recenterOnUser = useCallback(() => {
+    if (!latestUserCoordinate) return;
+    const camera = cameraStateRef.current;
+    setFollowingUser(false);
+    cameraRef.current?.setCamera({
+      centerCoordinate: latestUserCoordinate,
+      zoomLevel: camera.zoom,
+      heading: camera.heading,
+      pitch: camera.pitch,
+      animationDuration: RECENTER_ANIMATION_MS,
+      animationMode: 'easeTo',
+    });
+    setShowRecenterButton(false);
+  }, [latestUserCoordinate, setFollowingUser]);
 
   const nearbyEnabled = !!movement.latest || !!lastLocation;
 
@@ -254,21 +299,14 @@ export function MapScreen(): JSX.Element {
       <MapboxGL.MapView
         style={styles.map}
         onDidFinishLoadingMap={() => undefined}
-        onCameraChanged={(state) => {
-          if (!state.gestures?.isGestureActive) return;
-          setFollowingUser(false);
-          const bounds = toVisibleBounds(state.properties?.bounds);
-          if (bounds) {
-            updateRecenterVisibility(bounds, false);
-          }
-        }}
+        onCameraChanged={handleCameraChanged}
         logoEnabled={false}
         attributionEnabled={true}
       >
         <MapboxGL.Camera
-          zoomLevel={16}
-          centerCoordinate={centerCoords}
-          followZoomLevel={16}
+          ref={cameraRef}
+          defaultSettings={{ centerCoordinate: DEFAULT_CENTER_COORDINATE, zoomLevel: INITIAL_MAP_ZOOM }}
+          followZoomLevel={INITIAL_MAP_ZOOM}
           followUserMode={MapboxGL.UserTrackingMode.Follow}
           followUserLocation={isFollowingUser}
         />
@@ -418,11 +456,7 @@ export function MapScreen(): JSX.Element {
           accessibilityRole="button"
           hitSlop={12}
           style={({ pressed }) => [styles.recenterButton, pressed && styles.recenterButtonPressed]}
-          onPress={() => {
-            if (!latestUserCoordinate) return;
-            setFollowingUser(true);
-            setShowRecenterButton(false);
-          }}
+          onPress={recenterOnUser}
         >
           <View style={styles.navigationArrow} />
         </Pressable>

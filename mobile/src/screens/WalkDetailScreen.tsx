@@ -1,9 +1,9 @@
 import type { WalkSession } from '@parkwalk/shared';
 import { useRoute, type RouteProp } from '@react-navigation/native';
-import MapboxGL from '@rnmapbox/maps';
+import MapboxGL, { type Camera as MapboxCamera } from '@rnmapbox/maps';
 import { useQuery } from '@tanstack/react-query';
 import type { Position } from 'geojson';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -11,9 +11,14 @@ import { fetchWalk } from '@/services/walksApi';
 import { useWalkSessionStore, type LocalWalkSession } from '@/stores/walkSessionStore';
 
 type Route = RouteProp<RootStackParamList, 'WalkDetail'>;
+const DETAIL_OVERVIEW_ZOOM = 12;
+const DETAIL_ROUTE_ZOOM = 15;
+const DETAIL_CAMERA_ANIMATION_MS = 450;
 
 export function WalkDetailScreen(): JSX.Element {
   const route = useRoute<Route>();
+  const cameraRef = useRef<MapboxCamera>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const localWalk = useWalkSessionStore((s) =>
     s.completedSessions.find(
       (walk) => walk.clientId === route.params.clientId || walk.serverId === route.params.walkId,
@@ -43,7 +48,21 @@ export function WalkDetailScreen(): JSX.Element {
         : null,
     [coordinates],
   );
-  const center = coordinates[0]?.[0] ?? ([-122.4194, 37.7749] as Position);
+  const center = useMemo<Position>(
+    () => coordinates[0]?.[0] ?? ([-122.4194, 37.7749] as Position),
+    [coordinates],
+  );
+  const centerKey = `${center[0]},${center[1]}`;
+
+  useEffect(() => {
+    if (!mapLoaded || !walk) return;
+    cameraRef.current?.setCamera({
+      centerCoordinate: center,
+      zoomLevel: DETAIL_ROUTE_ZOOM,
+      animationDuration: DETAIL_CAMERA_ANIMATION_MS,
+      animationMode: 'easeTo',
+    });
+  }, [center, centerKey, mapLoaded, walk]);
 
   if (!walk) {
     return (
@@ -64,8 +83,16 @@ export function WalkDetailScreen(): JSX.Element {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.mapBox}>
-        <MapboxGL.MapView style={styles.map} logoEnabled={false} attributionEnabled={false}>
-          <MapboxGL.Camera centerCoordinate={center} zoomLevel={15} />
+        <MapboxGL.MapView
+          style={styles.map}
+          logoEnabled={false}
+          attributionEnabled={false}
+          onDidFinishLoadingMap={() => setMapLoaded(true)}
+        >
+          <MapboxGL.Camera
+            ref={cameraRef}
+            defaultSettings={{ centerCoordinate: center, zoomLevel: DETAIL_OVERVIEW_ZOOM }}
+          />
           {shape ? (
             <MapboxGL.ShapeSource id="walk-detail-route" shape={shape}>
               <MapboxGL.LineLayer
