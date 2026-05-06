@@ -29,7 +29,10 @@ ParkWalk currently has two backend placement paths:
 
 1. **Manual/dev seed script**: `backend/prisma/seed.ts` deletes prior dev
    entities and places a Poisson-disc cluster around `SEED_CENTER_LAT/LNG`.
-   Use this when preparing a known first-walk route.
+   Use this when preparing a known first-walk route. When walkable snapping is
+   enabled, the seed script first tries to place markers on Mapbox Streets
+   walkable ways, then falls back to random placement unless
+   `WALKABLE_SNAP_REQUIRED=true`.
 2. **Nearby auto-seed helper**: when `NEARBY_AUTO_SEED_ENABLED=true`,
    `GET /api/v1/entities/nearby` tops up a shared cluster of collectibles
    around the requested `lat/lng` if the authenticated user sees fewer than
@@ -53,15 +56,69 @@ delete existing entities. Placement metadata is stored under:
 }
 ```
 
+When walkable snapping is enabled, newly inserted rows use placement
+`version: 2` and keep the same compatibility keys while adding `snap` metadata:
+
+```json
+{
+  "placement": {
+    "source": "nearby_auto_seed",
+    "version": 2,
+    "center": { "latitude": 55.6761, "longitude": 12.5683 },
+    "radiusMeters": 140,
+    "generatedAt": "2026-05-06T10:00:00.000Z",
+    "snap": {
+      "status": "snapped",
+      "provider": "mapbox_tilequery",
+      "distanceMeters": 6.5,
+      "featureId": "123",
+      "class": "path",
+      "type": "footway",
+      "name": "Campus Walk"
+    }
+  }
+}
+```
+
+If Mapbox returns no usable walkable way or the provider is unavailable,
+auto-seeding inserts `version: 2` rows with
+`snap.status = "fallback_unsnapped"` so the field test still has markers.
+Manual seed behaves the same unless `WALKABLE_SNAP_REQUIRED=true`, in which
+case it fails loudly.
+
 Config knobs:
 
-| Env var                                | Purpose                                                                                      |
-| -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `NEARBY_AUTO_SEED_ENABLED`             | Enables `/nearby` top-up behavior. Keep false in production until spawn policy is finalized. |
-| `NEARBY_AUTO_SEED_TARGET_COUNT`        | Number of visible uncollected collectibles to maintain around the queried location.          |
-| `NEARBY_AUTO_SEED_RADIUS_METERS`       | Max scatter radius around the user/query point.                                              |
-| `NEARBY_AUTO_SEED_MIN_DISTANCE_METERS` | Avoids spawning directly on top of the user.                                                 |
-| `NEARBY_AUTO_SEED_MIN_SPACING_METERS`  | Avoids overlapping markers / collection radii.                                               |
+| Env var                                  | Purpose                                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `NEARBY_AUTO_SEED_ENABLED`               | Enables `/nearby` top-up behavior. Keep false in production until spawn policy is finalized. |
+| `NEARBY_AUTO_SEED_TARGET_COUNT`          | Number of visible uncollected collectibles to maintain around the queried location.          |
+| `NEARBY_AUTO_SEED_RADIUS_METERS`         | Max scatter radius around the user/query point.                                              |
+| `NEARBY_AUTO_SEED_MIN_DISTANCE_METERS`   | Avoids spawning directly on top of the user.                                                 |
+| `NEARBY_AUTO_SEED_MIN_SPACING_METERS`    | Avoids overlapping markers / collection radii.                                               |
+| `WALKABLE_SNAPPING_ENABLED`              | Enables Mapbox Tilequery snapping for nearby auto-seed and manual/dev seed.                  |
+| `MAPBOX_ACCESS_TOKEN`                    | Server-side Mapbox token required when snapping is enabled.                                  |
+| `WALKABLE_SNAP_MAX_METERS`               | Max distance from a probe point to a walkable way. Default: 35m.                             |
+| `WALKABLE_SNAP_CACHE_TTL_SECONDS`        | Redis/in-memory cache lifetime for quantized Tilequery probes. Default: 86400.               |
+| `WALKABLE_SNAP_REQUIRED`                 | Makes seed/snapping failure hard-fail instead of falling back. Default: false.               |
+| `WALKABLE_TILEQUERY_MAX_CALLS`           | Per request/seed-run Tilequery probe budget. Default: 8.                                     |
+
+### Walkable-way snapping
+
+The backend uses Mapbox Streets Tilequery against `mapbox.mapbox-streets-v8`
+with `layers=road`, `geometry=linestring`, and a bounded probe budget. Tilequery
+returns point coordinates at the closest point on the line feature, so ParkWalk
+does not calculate nearest-point-on-line itself.
+
+Accepted walkable features are deliberately conservative:
+
+- `class=pedestrian`
+- `class=path` with `type=footway`, `sidewalk`, `crossing`, `steps`, `path`,
+  `hiking`, or `trail`
+
+The v1 filter excludes cycleways, mountain-bike trails, pistes, bridleways,
+service roads, and normal vehicle streets. After snapping, the backend still
+validates spawn radius, minimum distance from the user/query center, and spacing
+from existing/newly placed collectibles.
 
 ### Future placement contexts
 

@@ -2,7 +2,23 @@ import 'dotenv/config';
 
 import { PrismaClient } from '@prisma/client';
 
+import {
+  parseWalkablePlacementConfig,
+  type WalkablePlacementConfig,
+} from '../src/modules/entities/placement.config.js';
+import {
+  type GeoPoint,
+  pickRandomPlacement,
+} from '../src/modules/entities/placement.geo.js';
+import {
+  createMemoryWalkableSnapCache,
+  findWalkableSnapCandidates,
+  type SnappedPlacementCandidate,
+  type WalkableSnapMetadata,
+} from '../src/modules/entities/walkable-snapping.js';
+
 const prisma = new PrismaClient();
+const MAX_ATTEMPTS_PER_MARKER = 200;
 
 /**
  * Seeds a disc of collectibles around SEED_CENTER_LAT/LNG. Drop a GPS pin in
@@ -17,6 +33,8 @@ const prisma = new PrismaClient();
  *                                        sit inside each other's collection
  *                                        radius (default 12m; collection
  *                                        radii are 10-15m)
+ *   WALKABLE_SNAPPING_ENABLED          — snap seed markers to Mapbox walkable
+ *                                        line features when true
  *
  * Sampling: uniform-on-the-disc (`r = R * sqrt(U)`, not `r = R * U`, which
  * would bias toward the center). Combined with rejection sampling, this gives
@@ -29,6 +47,7 @@ async function main(): Promise<void> {
   const count = Number(process.env.SEED_ENTITY_COUNT ?? 15);
   const scatter = Number(process.env.SEED_SCATTER_METERS ?? 500);
   const minSpacing = Number(process.env.SEED_MIN_SPACING_METERS ?? 12);
+  const snapConfig = parseWalkablePlacementConfig(process.env);
 
   if (
     Number.isNaN(centerLat) ||
@@ -62,29 +81,34 @@ async function main(): Promise<void> {
   await prisma.userCollection.deleteMany({});
   await prisma.$executeRawUnsafe(`DELETE FROM game_entities`);
 
-  const placed: { lat: number; lng: number }[] = [];
-  const maxAttemptsPerMarker = 200;
+  const center = { lat: centerLat, lng: centerLng };
+  const placed: GeoPoint[] = [];
+  const generatedAt = new Date().toISOString();
+  const snappedCandidates = await loadSeedSnappedCandidates({
+    center,
+    radiusMeters: scatter,
+    minSpacingMeters: minSpacing,
+    wanted: count,
+    snapConfig,
+  });
 
   for (let i = 0; i < count; i++) {
-    let accepted: { lat: number; lng: number } | null = null;
-    for (let attempt = 0; attempt < maxAttemptsPerMarker; attempt++) {
-      const candidate = offsetMeters(
-        centerLat,
-        centerLng,
-        scatter * Math.sqrt(Math.random()),
-        360 * Math.random(),
-      );
-      const tooClose = placed.some(
-        (p) => haversineMeters(p.lat, p.lng, candidate.lat, candidate.lng) < minSpacing,
-      );
-      if (!tooClose) {
-        accepted = candidate;
-        break;
-      }
-    }
+    const snappedCandidate = snappedCandidates[i];
+    const fallbackCandidate =
+      snappedCandidate === undefined
+        ? pickRandomPlacement({
+            center,
+            radiusMeters: scatter,
+            minDistanceMeters: 0,
+            minSpacingMeters: minSpacing,
+            occupied: placed,
+            maxAttempts: MAX_ATTEMPTS_PER_MARKER,
+          })
+        : null;
+    const accepted = snappedCandidate ?? fallbackCandidate;
     if (!accepted) {
       throw new Error(
-        `Could not place marker ${i + 1}/${count} after ${maxAttemptsPerMarker} attempts. ` +
+        `Could not place marker ${i + 1}/${count} after ${MAX_ATTEMPTS_PER_MARKER} attempts. ` +
           `Increase SEED_SCATTER_METERS, decrease SEED_ENTITY_COUNT, or lower SEED_MIN_SPACING_METERS.`,
       );
     }
@@ -100,12 +124,28 @@ async function main(): Promise<void> {
           rarity: 'rare',
           points,
           iconKey: 'gem',
+          placement: seedPlacementMetadata({
+            center,
+            radiusMeters: scatter,
+            generatedAt,
+            snapConfig,
+            snappedCandidate,
+            fallbackCandidate,
+          }),
         }
       : {
           name: `Walk Token #${i + 1}`,
           description: 'Collect while walking to earn points',
           points,
           iconKey: 'coin',
+          placement: seedPlacementMetadata({
+            center,
+            radiusMeters: scatter,
+            generatedAt,
+            snapConfig,
+            snappedCandidate,
+            fallbackCandidate,
+          }),
         };
 
     await prisma.$executeRawUnsafe(
@@ -121,37 +161,71 @@ async function main(): Promise<void> {
   console.warn(`Seed complete. Placed ${placed.length} markers.`);
 }
 
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (d: number): number => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+async function loadSeedSnappedCandidates(params: {
+  center: GeoPoint;
+  radiusMeters: number;
+  minSpacingMeters: number;
+  wanted: number;
+  snapConfig: WalkablePlacementConfig;
+}): Promise<SnappedPlacementCandidate[]> {
+  if (!params.snapConfig.WALKABLE_SNAPPING_ENABLED) return [];
+  const snapped = await findWalkableSnapCandidates({
+    center: params.center,
+    radiusMeters: params.radiusMeters,
+    minDistanceMeters: 0,
+    minSpacingMeters: params.minSpacingMeters,
+    occupied: [],
+    wanted: params.wanted,
+    config: params.snapConfig,
+    cache: createMemoryWalkableSnapCache(),
+  });
+
+  if (snapped.length < params.wanted) {
+    const message =
+      `Walkable snapping found ${snapped.length}/${params.wanted} seed markers. ` +
+      `The remaining markers will use random unsnapped fallback.`;
+    if (params.snapConfig.WALKABLE_SNAP_REQUIRED) {
+      throw new Error(message);
+    }
+    console.warn(`WARN: ${message}`);
+  }
+
+  return snapped;
 }
 
-function offsetMeters(
-  lat: number,
-  lng: number,
-  meters: number,
-  bearingDegrees: number,
-): { lat: number; lng: number } {
-  const R = 6371000;
-  const b = (bearingDegrees * Math.PI) / 180;
-  const lat1 = (lat * Math.PI) / 180;
-  const lng1 = (lng * Math.PI) / 180;
-  const lat2 = Math.asin(
-    Math.sin(lat1) * Math.cos(meters / R) + Math.cos(lat1) * Math.sin(meters / R) * Math.cos(b),
-  );
-  const lng2 =
-    lng1 +
-    Math.atan2(
-      Math.sin(b) * Math.sin(meters / R) * Math.cos(lat1),
-      Math.cos(meters / R) - Math.sin(lat1) * Math.sin(lat2),
-    );
-  return { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI };
+function seedPlacementMetadata(params: {
+  center: GeoPoint;
+  radiusMeters: number;
+  generatedAt: string;
+  snapConfig: WalkablePlacementConfig;
+  snappedCandidate: SnappedPlacementCandidate | undefined;
+  fallbackCandidate: GeoPoint | null;
+}): Record<string, unknown> {
+  const snap = seedSnapMetadata(params);
+  return {
+    source: 'manual_seed',
+    version: params.snapConfig.WALKABLE_SNAPPING_ENABLED ? 2 : 1,
+    center: { latitude: params.center.lat, longitude: params.center.lng },
+    radiusMeters: params.radiusMeters,
+    generatedAt: params.generatedAt,
+    ...(snap ? { snap } : {}),
+  };
+}
+
+function seedSnapMetadata(params: {
+  snapConfig: WalkablePlacementConfig;
+  snappedCandidate: SnappedPlacementCandidate | undefined;
+  fallbackCandidate: GeoPoint | null;
+}): WalkableSnapMetadata | null {
+  if (!params.snapConfig.WALKABLE_SNAPPING_ENABLED) return null;
+  if (params.snappedCandidate) return params.snappedCandidate.snap;
+  if (params.fallbackCandidate) {
+    return {
+      status: 'fallback_unsnapped',
+      provider: 'mapbox_tilequery',
+    };
+  }
+  return null;
 }
 
 main()

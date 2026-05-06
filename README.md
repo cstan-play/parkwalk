@@ -100,7 +100,7 @@ Current handoff: `docs/00-CURRENT-STATUS.md`.
 - Push notifications (requires paid Apple Developer).
 - TestFlight / external testers.
 - Challenge and MeetingPoint entity types.
-- Android build.
+- Android build; iOS is the only active mobile target.
 
 See `docs/00-CURRENT-STATUS.md` for the current phase breakdown and next
 milestones.

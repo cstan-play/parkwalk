@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
+import { walkablePlacementEnvSchema } from './modules/entities/placement.config.js';
+
 /**
  * Zod-validated env. Fails fast on missing or malformed keys.
  *
  * Deliberately does NOT use `.passthrough()` (the `.unknown()` trap in the
  * original Joi example in docs/04-SETUP-BACKEND.md silently swallowed typos).
  */
-const envSchema = z.object({
+const coreEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   API_VERSION: z.string().default('v1'),
@@ -38,6 +40,8 @@ const envSchema = z.object({
   NEARBY_AUTO_SEED_MIN_DISTANCE_METERS: z.coerce.number().int().min(5).max(500).default(25),
   NEARBY_AUTO_SEED_MIN_SPACING_METERS: z.coerce.number().int().min(5).max(500).default(18),
 });
+
+const envSchema = z.intersection(coreEnvSchema, walkablePlacementEnvSchema);
 
 export type Env = z.infer<typeof envSchema>;
 

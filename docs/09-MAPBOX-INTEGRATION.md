@@ -1,8 +1,10 @@
 # Mapbox Integration & Custom Map Styling
 
-> Status note, 2026-04-27: the current iOS app uses Mapbox Streets through
-> `@rnmapbox/maps`. Custom styles and offline tile packs are Alpha follow-ups,
-> not completed work.
+> Status note, 2026-05-06: the current iOS app uses Mapbox Streets through
+> `@rnmapbox/maps`. Custom style work and custom collectible graphics are Alpha
+> product polish. Offline tile packs are de-prioritized unless field tests show
+> cellular map loading is unreliable or a custom map/art direction specifically
+> needs local tile packaging.
 
 ## Overview
 
@@ -27,17 +29,55 @@ The Phase 1 iOS map lives in `mobile/src/screens/MapScreen.tsx` and uses
 ParkWalk includes a Google Maps-style recenter button for when the user pans
 away from their own location:
 
-1. `MapScreen` keeps refs to both `MapView` and `Camera`.
+1. `MapScreen` listens to Mapbox camera events.
 2. When `onCameraChanged` reports an active gesture, the map leaves follow mode.
 3. The screen checks the latest GPS coordinate against the visible map bounds
-   from Mapbox (`state.properties.bounds` / `getVisibleBounds()`).
+   from the camera event (`state.properties.bounds`).
 4. If the user coordinate is outside the viewport, a floating round button is
    shown in the lower-right of the map.
-5. Pressing the button calls `camera.flyTo(latestUserCoordinate, 600)`, restores
-   follow-user mode, and hides the control.
+5. Pressing the button restores follow-user mode and hides the control. The app
+   intentionally does not call `MapView#getVisibleBounds()` or an explicit
+   `camera.flyTo(...)` here, because the native bounds method crashed on-device
+   during startup and explicit fly + follow caused duplicate camera motion.
 
 The button is intentionally not part of the removed debug overlay; it is a
 normal navigation affordance for field use.
+
+### Walkable-way snapping for collectibles
+
+The backend Alpha placement flow can use Mapbox Streets Tilequery to improve
+seeded collectible locations:
+
+- The provider queries `mapbox.mapbox-streets-v8` with `layers=road`,
+  `geometry=linestring`, and a bounded per-request probe budget.
+- Tilequery returns the closest point on a matching line feature plus
+  `properties.tilequery.distance`, so ParkWalk treats the returned point as the
+  snapped collectible candidate.
+- Accepted features are `class=pedestrian` and `class=path` with walkable
+  types such as `footway`, `sidewalk`, `crossing`, `steps`, `path`, `hiking`,
+  or `trail`.
+- Results are cached by quantized probe point in Redis, with in-memory cache
+  fallback for the manual seed script.
+
+This is different from Mapbox Map Matching: Map Matching is a better fit for
+cleaning an existing GPS trace, such as a recorded walk route. Tilequery is the
+v1 choice for collectible placement because it answers "what walkable line is
+near this candidate point?" without adding Overpass or local OSM imports.
+
+## Custom Visuals Without Offline Tiles
+
+Offline tiles are not required for the visual direction currently planned:
+
+- Use **Mapbox Studio** for custom map styling and host the style through
+  Mapbox's normal online style delivery.
+- Use `PointAnnotation`, `MarkerView`, or a `ShapeSource` + symbol layer for
+  custom collectible graphics and future game markers.
+- Use app-bundled image assets for marker icons, collectible states, and
+  lightweight UI decoration.
+
+Consider offline tile packs only if real field tests show repeated map blanking
+on cellular, or if a future map/art direction needs local packaged tiles rather
+than Mapbox-hosted styles.
 
 ## Mapbox Studio Setup
 

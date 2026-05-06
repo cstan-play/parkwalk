@@ -25,7 +25,9 @@ The current goal is not feature expansion. The goal is to prove the core loop:
   sessions/idempotency, health/ready endpoints, auth register/login/refresh/logout,
   nearby entities, collect transaction, and user stats.
 - **Placement**: manual seed script plus `NEARBY_AUTO_SEED_ENABLED` dogfooding
-  helper for shared nearby collectible clusters.
+  helper for shared nearby collectible clusters. Both paths can optionally snap
+  candidate markers to Mapbox Streets walkable ways through the backend
+  `WALKABLE_SNAPPING_ENABLED` Alpha flag.
 - **Movement validation**: GPS speed is primary; raw JS accelerometer steps and
   activity are corroborating. The server uses hard rejects plus persisted soft
   flags.
@@ -82,14 +84,22 @@ newly completed walks should sync with `path_segments`.
 - Previous Alpha walk history is intentionally not preserved during the
   `pathSegments` reset.
 - `CMMotionActivity` and HealthKit are not wired yet.
-- Offline Mapbox tile packs and walkable-way snapping are not implemented.
+- Walkable-way snapping is implemented behind backend env flags, but is not yet
+  field-verified on Railway. Enable `WALKABLE_SNAPPING_ENABLED=true` with a
+  server-side `MAPBOX_ACCESS_TOKEN` before testing snapped placements outdoors.
+- Offline Mapbox tile packs are intentionally de-prioritized for Alpha unless
+  field tests show cellular map loading is a real blocker, or unless a custom
+  map/art direction specifically requires local tile packaging. Custom map
+  styles and collectible graphics do not require offline tiles by default.
 - The mobile auth store restores tokens after app start, but not the full user
   object; local walk storage currently falls back to a generic authenticated
   owner after a cold relaunch. This is good enough for single-tester Alpha, but
   should be replaced by persisted user metadata or `/users/me` hydration before
   multi-account testing on one device.
-- Web dashboard, friends graph/activity feed, Android, push notifications, and
-  external TestFlight distribution are not part of the current working loop.
+- Web dashboard, friends graph/activity feed, push notifications, and external
+  TestFlight distribution are not part of the current working loop.
+- Android is dropped from the active roadmap. Keep shared contracts portable
+  where it is cheap, but do not plan, staff, or sequence Android work.
 
 ## Immediate Handoff
 
@@ -98,7 +108,8 @@ Use `docs/12-FIRST-WALK.md` as the checklist.
 1. Verify `https://parkwalk-production.up.railway.app/health` and `/ready`, or
    the equivalent staging Railway URL.
 2. Enable nearby auto-seeding on Railway, or seed a known route with
-   `backend/prisma/seed.ts`.
+   `backend/prisma/seed.ts`. For walkable-way snapping tests, also set
+   `WALKABLE_SNAPPING_ENABLED=true` and `MAPBOX_ACCESS_TOKEN`.
 3. Build/run the app on the iPhone from Xcode.
 4. Register or log in, grant location/motion permissions, walk outside, and tap
    a marker.
@@ -140,9 +151,10 @@ Use `docs/12-FIRST-WALK.md` as the checklist.
 
 ### Alpha P1 — Field Robustness
 
-- Add walkable-way snapping for seeded entities so markers do not land inside
-  buildings/private areas.
-- Add Mapbox offline tile packs around the player/test area.
+- Field-test Mapbox Tilequery walkable-way snapping for seeded entities so
+  markers do not land inside buildings/private areas.
+- Defer Mapbox offline tile packs unless cellular reliability, styling, or
+  custom map asset delivery proves they are needed.
 - Tighten observability around collect failures without reintroducing a permanent
   debug overlay.
 
@@ -154,7 +166,6 @@ Use `docs/12-FIRST-WALK.md` as the checklist.
 
 ### Phase 2 — Broader Platform
 
-- Android build.
 - Paid Apple Developer/TestFlight/external testers.
 - Push notifications.
 - Real-time WebSocket/Socket.IO features if polling is no longer enough.

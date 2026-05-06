@@ -2,8 +2,9 @@
 
 > Status note, 2026-04-27: this is the architecture direction, not a literal
 > inventory of implemented services. The current running system is a modular
-> Express REST backend plus the iOS app. Android, web dashboard, and WebSocket
-> real-time features are planned later; see `00-CURRENT-STATUS.md`.
+> Express REST backend plus the iOS app. Android is no longer on the active
+> roadmap; web dashboard and WebSocket real-time features are planned later; see
+> `00-CURRENT-STATUS.md`.
 
 ## Overview
 

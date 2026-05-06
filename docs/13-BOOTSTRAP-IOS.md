@@ -241,10 +241,10 @@ Phase 1 and tracked here so we don't lose them:
    buildings/private yards. Alpha upgrade: snap each candidate to the
    nearest OSM footway/sidewalk/path via Overpass or a local extract
    before insert. Tracked in `docs/08-GAME-ENTITIES.md`.
-2. **Offline map tiles**. MapScreen uses Mapbox Streets with no
-   `OfflineManager` — a dropped cellular signal blanks the map
-   mid-walk. Alpha upgrade: pre-download a ~500m tile pack around the
-   user on first launch.
+2. **Offline map tiles — de-prioritized**. MapScreen uses Mapbox Streets with
+   no `OfflineManager`. Keep using online Mapbox styles for now; revisit tile
+   packs only if field tests show cellular map loading is a real blocker or a
+   future art direction requires locally packaged custom tiles.
 3. **Auth session refresh — done for Phase 1.** The API client now retries
    a single 401 via `/api/v1/auth/refresh`, rotates stored Keychain tokens,
    and clears local auth state if refresh fails.

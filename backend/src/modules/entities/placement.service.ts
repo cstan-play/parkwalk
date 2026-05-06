@@ -1,14 +1,30 @@
 import { env } from '../../env.js';
 import { logger } from '../../logger.js';
 import { prisma } from '../../prisma.js';
+import { redis } from '../../redis.js';
 
 import {
   findActiveEntityLocations,
   insertCollectible,
   type EntityLocationRow,
 } from './entities.repository.js';
+import type { WalkablePlacementConfig } from './placement.config.js';
+import { type GeoPoint, pickRandomPlacement } from './placement.geo.js';
+import {
+  createRedisWalkableSnapCache,
+  findWalkableSnapCandidates,
+  type SnappedPlacementCandidate,
+  type WalkableSnapMetadata,
+} from './walkable-snapping.js';
 
 const MAX_ATTEMPTS_PER_MARKER = 80;
+const snapCache = createRedisWalkableSnapCache(redis);
+type WalkableSnapFinder = typeof findWalkableSnapCandidates;
+let walkableSnapFinder: WalkableSnapFinder = findWalkableSnapCandidates;
+
+export function setWalkableSnapFinderForTests(finder: WalkableSnapFinder | null): void {
+  walkableSnapFinder = finder ?? findWalkableSnapCandidates;
+}
 
 export async function ensureNearbyCollectibles(params: {
   visibleCount: number;
@@ -34,19 +50,42 @@ export async function ensureNearbyCollectibles(params: {
     limit: 500,
   });
 
-  const occupied = existing.map((e) => ({ lat: e.lat, lng: e.lng }));
+  const center = { lat: params.lat, lng: params.lng };
+  const occupied: GeoPoint[] = existing.map((e) => ({ lat: e.lat, lng: e.lng }));
   const inserted: EntityLocationRow[] = [];
+  const snapConfig = currentWalkableConfig();
+  const snappedCandidates = await loadSnappedCandidates({
+    center,
+    radiusMeters: radius,
+    minDistanceMeters: minDistance,
+    minSpacingMeters: minSpacing,
+    occupied,
+    wanted,
+    snapConfig,
+  });
 
   for (let i = 0; i < wanted; i++) {
-    const candidate = pickCandidate({
-      centerLat: params.lat,
-      centerLng: params.lng,
-      radiusMeters: radius,
-      minDistanceMeters: minDistance,
-      minSpacingMeters: minSpacing,
-      occupied,
-    });
+    const snappedCandidate = snappedCandidates[i];
+    const fallbackCandidate =
+      snappedCandidate === undefined
+        ? pickRandomPlacement({
+            center,
+            radiusMeters: radius,
+            minDistanceMeters: minDistance,
+            minSpacingMeters: minSpacing,
+            occupied,
+            maxAttempts: MAX_ATTEMPTS_PER_MARKER,
+          })
+        : null;
+    const candidate = snappedCandidate ?? fallbackCandidate;
     if (!candidate) break;
+
+    const snap = placementSnapMetadata({
+      snapConfig,
+      snappedCandidate,
+      fallbackCandidate,
+    });
+    const placementVersion = snapConfig.WALKABLE_SNAPPING_ENABLED ? 2 : 1;
 
     const index = params.visibleCount + inserted.length + 1;
     const isRare = index % 6 === 0;
@@ -62,10 +101,11 @@ export async function ensureNearbyCollectibles(params: {
         iconKey: isRare ? 'gem' : 'coin',
         placement: {
           source: 'nearby_auto_seed',
-          version: 1,
+          version: placementVersion,
           center: { latitude: params.lat, longitude: params.lng },
           radiusMeters: radius,
           generatedAt: new Date().toISOString(),
+          ...(snap ? { snap } : {}),
         },
       },
     });
@@ -77,6 +117,7 @@ export async function ensureNearbyCollectibles(params: {
     logger.info(
       {
         inserted: inserted.length,
+        snapped: snappedCandidates.length,
         center: { lat: params.lat, lng: params.lng },
         radiusMeters: radius,
       },
@@ -87,58 +128,59 @@ export async function ensureNearbyCollectibles(params: {
   return inserted.length;
 }
 
-function pickCandidate(params: {
-  centerLat: number;
-  centerLng: number;
+async function loadSnappedCandidates(params: {
+  center: GeoPoint;
   radiusMeters: number;
   minDistanceMeters: number;
   minSpacingMeters: number;
-  occupied: Array<{ lat: number; lng: number }>;
-}): { lat: number; lng: number } | null {
-  for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_MARKER; attempt++) {
-    const distance =
-      params.minDistanceMeters +
-      (params.radiusMeters - params.minDistanceMeters) * Math.sqrt(Math.random());
-    const bearing = Math.random() * 360;
-    const candidate = offsetMeters(params.centerLat, params.centerLng, distance, bearing);
-    const tooClose = params.occupied.some(
-      (p) => haversineMeters(p.lat, p.lng, candidate.lat, candidate.lng) < params.minSpacingMeters,
-    );
-    if (!tooClose) return candidate;
+  occupied: GeoPoint[];
+  wanted: number;
+  snapConfig: WalkablePlacementConfig;
+}): Promise<SnappedPlacementCandidate[]> {
+  if (!params.snapConfig.WALKABLE_SNAPPING_ENABLED) return [];
+  try {
+    return await walkableSnapFinder({
+      center: params.center,
+      radiusMeters: params.radiusMeters,
+      minDistanceMeters: params.minDistanceMeters,
+      minSpacingMeters: params.minSpacingMeters,
+      occupied: params.occupied,
+      wanted: params.wanted,
+      config: params.snapConfig,
+      cache: snapCache,
+    });
+  } catch (err) {
+    if (params.snapConfig.WALKABLE_SNAP_REQUIRED) {
+      throw err;
+    }
+    logger.warn({ err }, 'walkable snapping failed; falling back to unsnapped placement');
+    return [];
+  }
+}
+
+function currentWalkableConfig(): WalkablePlacementConfig {
+  return {
+    MAPBOX_ACCESS_TOKEN: env.MAPBOX_ACCESS_TOKEN,
+    WALKABLE_SNAPPING_ENABLED: env.WALKABLE_SNAPPING_ENABLED,
+    WALKABLE_SNAP_MAX_METERS: env.WALKABLE_SNAP_MAX_METERS,
+    WALKABLE_SNAP_CACHE_TTL_SECONDS: env.WALKABLE_SNAP_CACHE_TTL_SECONDS,
+    WALKABLE_SNAP_REQUIRED: env.WALKABLE_SNAP_REQUIRED,
+    WALKABLE_TILEQUERY_MAX_CALLS: env.WALKABLE_TILEQUERY_MAX_CALLS,
+  };
+}
+
+function placementSnapMetadata(params: {
+  snapConfig: WalkablePlacementConfig;
+  snappedCandidate: SnappedPlacementCandidate | undefined;
+  fallbackCandidate: GeoPoint | null;
+}): WalkableSnapMetadata | null {
+  if (!params.snapConfig.WALKABLE_SNAPPING_ENABLED) return null;
+  if (params.snappedCandidate) return params.snappedCandidate.snap;
+  if (params.fallbackCandidate) {
+    return {
+      status: 'fallback_unsnapped',
+      provider: 'mapbox_tilequery',
+    };
   }
   return null;
-}
-
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const radiusMeters = 6371000;
-  const toRad = (d: number): number => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * radiusMeters * Math.asin(Math.min(1, Math.sqrt(a)));
-}
-
-function offsetMeters(
-  lat: number,
-  lng: number,
-  meters: number,
-  bearingDegrees: number,
-): { lat: number; lng: number } {
-  const radiusMeters = 6371000;
-  const bearing = (bearingDegrees * Math.PI) / 180;
-  const lat1 = (lat * Math.PI) / 180;
-  const lng1 = (lng * Math.PI) / 180;
-  const lat2 = Math.asin(
-    Math.sin(lat1) * Math.cos(meters / radiusMeters) +
-      Math.cos(lat1) * Math.sin(meters / radiusMeters) * Math.cos(bearing),
-  );
-  const lng2 =
-    lng1 +
-    Math.atan2(
-      Math.sin(bearing) * Math.sin(meters / radiusMeters) * Math.cos(lat1),
-      Math.cos(meters / radiusMeters) - Math.sin(lat1) * Math.sin(lat2),
-    );
-  return { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI };
 }

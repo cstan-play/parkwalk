@@ -17,9 +17,9 @@ A cross-platform location-based social walking game where users collect items, h
 >
 > 1. **End-to-end walk loop on a real iPhone** (this is the MVP kernel).
 > 2. **Architectural integrity** — no "we'll refactor later" debt.
-> 3. **Alpha-grade product polish** — offline tiles, walkable-way snapping,
->    auth refresh, friends graph, leaderboards, web dashboard — built on top
->    of the same kernel.
+> 3. **Alpha-grade product polish** — walkable-way snapping, custom map/game
+>    styling, auth refresh, friends graph, leaderboards, web dashboard — built
+>    on top of the same kernel.
 
 ### Current status
 
@@ -56,14 +56,15 @@ deployed to Railway.
 
 ### Alpha P1/P2 — product hardening
 
-- Offline map tiles.
 - Walkable-way snapping for seeded entities.
+- Custom map styling and collectible graphics.
+- Offline map tiles only if cellular reliability or custom map asset delivery
+  makes them necessary.
 - Friends graph, activity feed, leaderboards.
 - Web dashboard for map management, moderation, stats, and activity review.
 
-### Phase 2 — broader platform
+### Phase 2 — broader product surface
 
-- Android build.
 - Paid Apple Developer/TestFlight/external testers.
 - Remote push notifications.
 - Real-time WebSocket features if polling is no longer enough.
@@ -72,7 +73,7 @@ deployed to Railway.
 ## Platform Support
 
 - **iOS**: Native app (React Native), current focus.
-- **Android**: Planned after Alpha.
+- **Android**: Dropped from the active roadmap.
 - **Web**: Dashboard planned after the walk loop is proven.
 
 ## Tech Stack Summary
@@ -115,7 +116,7 @@ docs/
 ├── 06-SETUP-WEB.md             # Future dashboard sketch
 ├── 07-MOVEMENT-DETECTION.md    # Movement validation algorithm
 ├── 08-GAME-ENTITIES.md         # Placement and entity system
-├── 09-MAPBOX-INTEGRATION.md    # Mapbox style/offline-map planning
+├── 09-MAPBOX-INTEGRATION.md    # Mapbox style, graphics, and recenter behavior
 ├── 10-TESTING-STRATEGY.md      # Testing approach & tools
 ├── 11-DEPLOYMENT.md            # Future production deployment reference
 ├── 12-FIRST-WALK.md            # First end-to-end walk checklist
@@ -177,16 +178,15 @@ cd ios && pod install && cd ..
 - **Now**: push/deploy the recorded-walk backend route and migration, then
   confirm existing on-device failed walk sync rows retry to `synced`.
 - **Next**: DB verification for synced walks and collections linked to walks;
-  then HealthKit, walkable-way snapping, offline tiles.
+  then HealthKit, walkable-way snapping, custom map/game visuals.
 - **Later Alpha**: friends/activity, leaderboards, web dashboard, hardening.
-- **Phase 2**: Android, external distribution, push, real-time features,
-  challenges/events.
+- **Phase 2**: external distribution, push, real-time features, challenges/events.
 
 ## Key Decisions & Rationale
 
 ### Why React Native?
 
-- Single codebase for iOS/Android (70-80% code sharing)
+- Strong iOS iteration speed with a native shell where needed
 - Good sensor access via native modules
 - Fast iteration for MVP
 - Can optimize with native code later if needed
