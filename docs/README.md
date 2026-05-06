@@ -174,11 +174,12 @@ cd ios && pod install && cd ..
 
 - **Done**: backend infrastructure, shared schemas, iOS bootstrap, hosted API
   default, auth refresh/logout, nearby auto-seeding, collect idempotency,
-  movement soft-flag validation, and first field-test fixes.
-- **Now**: push/deploy the recorded-walk backend route and migration, then
-  confirm existing on-device failed walk sync rows retry to `synced`.
+  movement soft-flag validation, first field-test fixes, and Mapbox Tilequery
+  walkable-way snapping for generated collectibles.
+- **Now**: confirm recorded-walk backend sync and keep field-testing snapped
+  collectible placement across more walking routes.
 - **Next**: DB verification for synced walks and collections linked to walks;
-  then HealthKit, walkable-way snapping, custom map/game visuals.
+  then HealthKit and custom map/game visuals.
 - **Later Alpha**: friends/activity, leaderboards, web dashboard, hardening.
 - **Phase 2**: external distribution, push, real-time features, challenges/events.
 

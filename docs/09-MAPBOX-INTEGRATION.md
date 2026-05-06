@@ -64,6 +64,11 @@ cleaning an existing GPS trace, such as a recorded walk route. Tilequery is the
 v1 choice for collectible placement because it answers "what walkable line is
 near this candidate point?" without adding Overpass or local OSM imports.
 
+Status: Alpha v1 is implemented, enabled on Railway, and visually
+field-validated on iPhone with fresh nearby auto-seeded collectibles landing on
+walking paths. Keep tuning the accepted feature filter and snap radius as more
+neighborhoods are tested.
+
 ## Custom Visuals Without Offline Tiles
 
 Offline tiles are not required for the visual direction currently planned:

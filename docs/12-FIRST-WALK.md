@@ -81,7 +81,9 @@ Check Railway logs — you should see a registration request.
 
 ## Step 4 — Seed entities near where you will walk
 
-Recommended for ad-hoc testing: enable nearby auto-seeding on Railway:
+Recommended for ad-hoc testing: enable nearby auto-seeding on Railway. For the
+Alpha field setup, keep walkable-way snapping enabled too so newly generated
+collectibles are placed on Mapbox Streets pedestrian/path features:
 
 ```env
 NEARBY_AUTO_SEED_ENABLED=true
@@ -89,11 +91,31 @@ NEARBY_AUTO_SEED_TARGET_COUNT=12
 NEARBY_AUTO_SEED_RADIUS_METERS=140
 NEARBY_AUTO_SEED_MIN_DISTANCE_METERS=25
 NEARBY_AUTO_SEED_MIN_SPACING_METERS=18
+WALKABLE_SNAPPING_ENABLED=true
+MAPBOX_ACCESS_TOKEN=pk...
+WALKABLE_SNAP_MAX_METERS=35
+WALKABLE_SNAP_REQUIRED=false
+WALKABLE_TILEQUERY_MAX_CALLS=8
 ```
 
 Restart/redeploy the Railway service after changing variables. The next
 authenticated `/api/v1/entities/nearby` call will top up a small shared
 cluster around the phone's reported location.
+
+The top-up only creates new markers when the backend sees fewer active nearby
+collectibles than `NEARBY_AUTO_SEED_TARGET_COUNT`. To force a clean snapping
+test around the phone's current location, deactivate old generated test markers
+before opening the app:
+
+```sql
+UPDATE game_entities
+SET active = false
+WHERE active = true
+  AND config->'placement'->>'source' IN ('nearby_auto_seed', 'manual_seed');
+```
+
+After the app opens, fresh rows should have `placement.version = 2` and
+`placement.snap.provider = "mapbox_tilequery"`.
 
 Alternative: use `docs/14-DEPLOY-RAILWAY.md` Step 10 to run
 `prisma:seed` as a Railway one-off command after setting
@@ -138,10 +160,26 @@ SELECT id, movement_validated, movement_state, points_earned, distance_from_enti
 FROM user_collections
 ORDER BY collected_at DESC
 LIMIT 5;
+
+SELECT
+  config->'placement'->>'source' AS source,
+  config->'placement'->>'version' AS version,
+  config->'placement'->'snap'->>'status' AS snap_status,
+  config->'placement'->'snap'->>'class' AS class,
+  config->'placement'->'snap'->>'type' AS type,
+  active,
+  created_at
+FROM game_entities
+WHERE config->'placement'->>'source' = 'nearby_auto_seed'
+ORDER BY created_at DESC
+LIMIT 20;
 ```
 
 `movement_validated` must be `t` (true) and `movement_state` must be
-`WALKING_VALID`.
+`WALKING_VALID`. For fresh snapped collectibles, expect `version = 2`,
+`snap_status = snapped`, and `class/type` values such as `path`, `footway`,
+`sidewalk`, or `pedestrian`. `fallback_unsnapped` means placement still worked,
+but Mapbox did not provide enough usable walkable-way candidates for that run.
 
 ## Step 7 — Adversarial tests (this is the proof of the USP)
 

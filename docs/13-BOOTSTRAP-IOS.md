@@ -234,13 +234,14 @@ These were originally tagged "Phase 1.5 / deferred" when the project was
 framed as a strict MVP. Under the MVP+Alpha framing they are in-scope for
 Phase 1 and tracked here so we don't lose them:
 
-1. **Walkable-way snapping for seeded entities**. Current seed script
-   (`backend/prisma/seed.ts`) places markers uniformly on a disc with
-   rejection-sampled minimum spacing — great for dense, alpha-grade
-   layouts in open terrain, but markers can still land in
-   buildings/private yards. Alpha upgrade: snap each candidate to the
-   nearest OSM footway/sidewalk/path via Overpass or a local extract
-   before insert. Tracked in `docs/08-GAME-ENTITIES.md`.
+1. **Walkable-way snapping for seeded entities — Alpha v1 implemented and
+   field-validated.** Nearby auto-seed and the manual/dev seed script can now
+   snap generated markers to Mapbox Streets walkable road/path line features
+   through Mapbox Tilequery. Railway production has the snapping env enabled,
+   and the first iPhone field check showed fresh collectibles landing cleanly
+   on walking paths. Continue tuning snap radius, spacing, and accepted Mapbox
+   path types as more test routes are walked. Tracked in
+   `docs/08-GAME-ENTITIES.md`.
 2. **Offline map tiles — de-prioritized**. MapScreen uses Mapbox Streets with
    no `OfflineManager`. Keep using online Mapbox styles for now; revisit tile
    packs only if field tests show cellular map loading is a real blocker or a

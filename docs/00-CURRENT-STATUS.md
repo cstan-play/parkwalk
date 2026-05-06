@@ -57,7 +57,8 @@ The current goal is not feature expansion. The goal is to prove the core loop:
 
 ## Latest Field-Test Result
 
-Manual `ParkWalkRelease` testing on iPhone passed the core recorded-walk loop:
+Manual `ParkWalkRelease` testing on iPhone passed the core recorded-walk loop
+and the first walkable-snapping check:
 
 - Start Walk updates timer, distance, and steps.
 - Stats, Walks, and Settings open while a walk is active.
@@ -68,6 +69,10 @@ Manual `ParkWalkRelease` testing on iPhone passed the core recorded-walk loop:
 - Force-close recovery Save/Discard works.
 - Screen-lock walk plus pedometer backfill is plausible.
 - Field diagnostics can be expanded/collapsed without freezing the UI.
+- Mapbox Tilequery walkable-way snapping is enabled on Railway and generated
+  fresh `nearby_auto_seed` collectibles that visually land on walking paths.
+  Old active v1 generated markers were deactivated in Railway PostGIS so the
+  app could create fresh v2 snapped markers from the user's location.
 
 Cloud sync became available after the walk API deploy. The next local build
 should validate the new route-segment schema reset: old Alpha walks are
@@ -84,9 +89,10 @@ newly completed walks should sync with `path_segments`.
 - Previous Alpha walk history is intentionally not preserved during the
   `pathSegments` reset.
 - `CMMotionActivity` and HealthKit are not wired yet.
-- Walkable-way snapping is implemented behind backend env flags, but is not yet
-  field-verified on Railway. Enable `WALKABLE_SNAPPING_ENABLED=true` with a
-  server-side `MAPBOX_ACCESS_TOKEN` before testing snapped placements outdoors.
+- Walkable-way snapping is implemented, enabled on Railway, and visually
+  field-validated for nearby auto-seeded collectibles. It is still Alpha-grade:
+  tune snap radius, spacing, and accepted Mapbox path types as more routes are
+  tested.
 - Offline Mapbox tile packs are intentionally de-prioritized for Alpha unless
   field tests show cellular map loading is a real blocker, or unless a custom
   map/art direction specifically requires local tile packaging. Custom map
@@ -107,9 +113,9 @@ Use `docs/12-FIRST-WALK.md` as the checklist.
 
 1. Verify `https://parkwalk-production.up.railway.app/health` and `/ready`, or
    the equivalent staging Railway URL.
-2. Enable nearby auto-seeding on Railway, or seed a known route with
-   `backend/prisma/seed.ts`. For walkable-way snapping tests, also set
-   `WALKABLE_SNAPPING_ENABLED=true` and `MAPBOX_ACCESS_TOKEN`.
+2. Keep nearby auto-seeding and walkable snapping enabled on Railway, or seed a
+   known route with `backend/prisma/seed.ts`. If you need a clean placement
+   retest, deactivate old generated markers before opening the app.
 3. Build/run the app on the iPhone from Xcode.
 4. Register or log in, grant location/motion permissions, walk outside, and tap
    a marker.
@@ -151,8 +157,8 @@ Use `docs/12-FIRST-WALK.md` as the checklist.
 
 ### Alpha P1 — Field Robustness
 
-- Field-test Mapbox Tilequery walkable-way snapping for seeded entities so
-  markers do not land inside buildings/private areas.
+- Continue tuning Mapbox Tilequery walkable-way snapping for seeded entities so
+  markers stay reachable on paths and sidewalks without clustering awkwardly.
 - Defer Mapbox offline tile packs unless cellular reliability, styling, or
   custom map asset delivery proves they are needed.
 - Tighten observability around collect failures without reintroducing a permanent
