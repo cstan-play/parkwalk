@@ -8,6 +8,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Config from 'react-native-config';
 
+import { CompanionLayer } from '@/components/CompanionLayer';
+import { useCompanion } from '@/hooks/useCompanion';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { useMovementDetection } from '@/hooks/useMovementDetection';
 import { useWalkSession } from '@/hooks/useWalkSession';
@@ -73,6 +75,14 @@ export function MapScreen(): JSX.Element {
   const endWalk = useWalkSessionStore((s) => s.endWalk);
   const discardActiveWalk = useWalkSessionStore((s) => s.discardActiveWalk);
   const markCollected = useWalkSessionStore((s) => s.markCollected);
+
+  // Companion is only present while a walk is active; it depends on the
+  // walk-state gate rather than just the map being open.
+  const companion = useCompanion({
+    enabled: activeWalk?.status === 'active',
+    movement,
+    getCameraBearing: () => cameraStateRef.current.heading,
+  });
 
   // Scoped by idempotency key so concurrent collects
   // (unlikely given the marker-tap disable, but defensive) don't cross-talk.
@@ -328,6 +338,11 @@ export function MapScreen(): JSX.Element {
             />
           </MapboxGL.ShapeSource>
         ) : null}
+        <CompanionLayer
+          visible={companion.visible}
+          position={companion.position}
+          sprite={companion.sprite}
+        />
         {(nearbyQuery.data ?? []).map((e) => {
           const dimmed =
             isCollectInFlight && 'entityId' in collectUi && collectUi.entityId === e.id;
