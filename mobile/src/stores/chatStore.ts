@@ -1,17 +1,19 @@
 import type { ChatMessage } from '@parkwalk/shared';
 import { create } from 'zustand';
 
-import { fetchChatMessages, sendChat } from '@/services/gusApi';
+import { fetchChatMessages, sendChat, submitQuickReply } from '@/services/gusApi';
 import { describeApiError } from '@/util/describeApiError';
 
 interface ChatStoreState {
   messages: ChatMessage[];
   loading: boolean;
   sending: boolean;
+  replyingToMessageId: string | null;
   loaded: boolean;
   error: string | null;
   loadMessages: () => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
+  submitQuickReply: (messageId: string, value: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -19,6 +21,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   messages: [],
   loading: false,
   sending: false,
+  replyingToMessageId: null,
   loaded: false,
   error: null,
 
@@ -49,5 +52,33 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
-  reset: () => set({ messages: [], loading: false, sending: false, loaded: false, error: null }),
+  submitQuickReply: async (messageId, value) => {
+    if (get().replyingToMessageId) return;
+
+    set({ replyingToMessageId: messageId, error: null });
+    try {
+      const result = await submitQuickReply({ messageId, value });
+      set((state) => ({
+        messages: [
+          ...state.messages.map((m) => (m.id === messageId ? result.sourceMessage : m)),
+          result.userMessage,
+          result.gusReply,
+        ],
+        replyingToMessageId: null,
+        loaded: true,
+      }));
+    } catch (err) {
+      set({ replyingToMessageId: null, error: describeApiError(err) });
+    }
+  },
+
+  reset: () =>
+    set({
+      messages: [],
+      loading: false,
+      sending: false,
+      replyingToMessageId: null,
+      loaded: false,
+      error: null,
+    }),
 }));

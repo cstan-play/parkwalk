@@ -33,6 +33,17 @@ The chat is intentionally online-first for this sprint. The backend/Postgres
 thread is the source of truth; the mobile store is in-memory only and reloads
 the thread when the screen opens.
 
+**Sprint 2 — tap-response data collection shipped locally.**
+
+- `POST /api/v1/gus/quickReply` validates a tapped button against the source
+  Gus message, writes the relevant value to today's `user_daily_state`, marks
+  the source message's `selectedReply`, and threads a `user_quick_reply` plus
+  `gus_quick_reply_followup`.
+- `mobile/src/screens/ChatScreen.tsx` renders inline quick-reply buttons under
+  eligible Gus messages and disables them after selection.
+- `mobile/src/stores/chatStore.ts` handles quick-reply submission and replaces
+  the source message with the server-updated row so reloads stay consistent.
+
 ## Runtime Flow
 
 1. User opens Map and taps `Gus`.
@@ -44,23 +55,35 @@ the thread when the screen opens.
    returns both rows.
 6. Mobile appends both rows to the visible thread.
 
+Quick-reply flow:
+
+1. A Gus message has `quickReplies`.
+2. User taps one.
+3. Mobile calls `POST /api/v1/gus/quickReply` with `{ messageId, value }`.
+4. Backend validates ownership and that the value belongs to the message.
+5. Backend upserts today's `user_daily_state` field named by the reply's
+   `dataField`.
+6. Backend marks the original message selected, creates the user tap row, and
+   creates Gus's follow-up row.
+7. Mobile disables the button row and appends the two new rows.
+
 If `ANTHROPIC_API_KEY` is unset, the backend deliberately returns a fallback
 string so the route can still be smoke-tested end to end.
 
 ## Message Shapes
 
-Sprint 1 renders all `chat_messages` rows with the same bubble component and
-keeps the row discriminators visible in code for later sprints.
+The chat screen renders all `chat_messages` rows with the same bubble component
+and keeps the row discriminators visible in code for later sprints.
 
-| `kind` | `role` | Sprint 1 behavior |
+| `kind` | `role` | Current behavior |
 |---|---|---|
 | `user_message` | `user` | Right-aligned user bubble |
 | `gus_reply` | `gus` | Left-aligned Gus bubble |
 | `gus_notification` | `gus` | Not generated yet; renderer already shows category tag if present |
-| `user_quick_reply` | `user` | Deferred to Sprint 2 |
-| `gus_quick_reply_followup` | `gus` | Deferred to Sprint 2 |
+| `user_quick_reply` | `user` | Right-aligned row created after tapping a quick reply |
+| `gus_quick_reply_followup` | `gus` | One-line Gus acknowledgment after a quick reply |
 
-## Sprint 1 Boundaries
+## Current Boundaries
 
 Included:
 
@@ -68,10 +91,11 @@ Included:
 - send/receive UI
 - loading, empty, retry, and "Gus is thinking" states
 - map entry point
+- inline quick-reply rendering
+- mood/motor/tremor/energy/meds/free-note writes to `user_daily_state`
 
 Deferred:
 
-- quick-reply buttons and `POST /gus/quickReply`
 - local notification scheduling and `POST /gus/notification/fire`
 - message ratings
 - offline chat cache
@@ -99,12 +123,16 @@ Manual smoke:
 5. Send a short message.
 6. Confirm both the user message and Gus reply appear.
 7. Leave and reopen the chat; the thread reloads from the backend.
+8. Seed or generate a Gus message with `quickReplies`; tap one and confirm the
+   row disables, a user tap appears, Gus follows up, and `user_daily_state`
+   updates for today.
 
 ## Next Sprint
 
-Sprint 2 should add tap-response structured data:
+Sprint 3 should add scheduled chat-notifications:
 
-- render `quickReplies` under eligible Gus messages
-- add `POST /api/v1/gus/quickReply`
-- write mood/motor/tremor/energy/meds/free-note data into `user_daily_state`
-- thread Gus's one-line follow-up after a tap
+- local Notifee scheduling for morning check-in, walk reminder, and post-walk
+  debrief
+- stock-line notification banners from `categories.ts`
+- `POST /api/v1/gus/notification/fire`
+- tap notification -> open chat -> generate/persist a `gus_notification`

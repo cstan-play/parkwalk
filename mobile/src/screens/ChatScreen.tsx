@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@parkwalk/shared';
+import type { ChatMessage, GusQuickReply } from '@parkwalk/shared';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -24,9 +24,11 @@ export function ChatScreen(_props: Props): JSX.Element {
   const loading = useChatStore((s) => s.loading);
   const loaded = useChatStore((s) => s.loaded);
   const sending = useChatStore((s) => s.sending);
+  const replyingToMessageId = useChatStore((s) => s.replyingToMessageId);
   const error = useChatStore((s) => s.error);
   const loadMessages = useChatStore((s) => s.loadMessages);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const submitQuickReply = useChatStore((s) => s.submitQuickReply);
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
@@ -82,7 +84,13 @@ export function ChatScreen(_props: Props): JSX.Element {
         ref={listRef}
         data={data}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <MessageBubble message={item} />}
+        renderItem={({ item }) => (
+          <MessageBubble
+            message={item}
+            replying={replyingToMessageId === item.id}
+            onQuickReply={(value) => void submitQuickReply(item.id, value)}
+          />
+        )}
         contentContainerStyle={[
           styles.messageList,
           data.length === 0 ? styles.emptyMessageList : null,
@@ -125,8 +133,19 @@ export function ChatScreen(_props: Props): JSX.Element {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
+function MessageBubble({
+  message,
+  replying,
+  onQuickReply,
+}: {
+  message: ChatMessage;
+  replying: boolean;
+  onQuickReply: (value: string) => void;
+}): JSX.Element {
   const isUser = message.role === 'user';
+  const replies = message.role === 'gus' ? message.quickReplies ?? [] : [];
+  const hasReplies = replies.length > 0;
+  const repliesDisabled = replying || !!message.selectedReply;
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.gusRow]}>
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.gusBubble]}>
@@ -134,10 +153,60 @@ function MessageBubble({ message }: { message: ChatMessage }): JSX.Element {
         <Text style={[styles.messageText, isUser ? styles.userText : styles.gusText]}>
           {message.content}
         </Text>
+        {hasReplies ? (
+          <QuickReplies
+            replies={replies}
+            selectedReply={message.selectedReply}
+            disabled={repliesDisabled}
+            onPress={onQuickReply}
+          />
+        ) : null}
         <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.gusTimestamp]}>
           {formatTime(message.createdAt)}
         </Text>
       </View>
+    </View>
+  );
+}
+
+function QuickReplies({
+  replies,
+  selectedReply,
+  disabled,
+  onPress,
+}: {
+  replies: GusQuickReply[];
+  selectedReply: string | null;
+  disabled: boolean;
+  onPress: (value: string) => void;
+}): JSX.Element {
+  return (
+    <View style={styles.quickReplies}>
+      {replies.map((reply) => {
+        const selected = selectedReply === reply.value;
+        return (
+          <Pressable
+            key={`${reply.dataField}:${reply.value}`}
+            accessibilityRole="button"
+            disabled={disabled}
+            style={[
+              styles.quickReplyButton,
+              selected ? styles.quickReplyButtonSelected : null,
+              disabled && !selected ? styles.quickReplyButtonDisabled : null,
+            ]}
+            onPress={() => onPress(reply.value)}
+          >
+            <Text
+              style={[
+                styles.quickReplyText,
+                selected ? styles.quickReplyTextSelected : null,
+              ]}
+            >
+              {reply.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -204,6 +273,35 @@ const styles = StyleSheet.create({
   messageText: { fontSize: 16, lineHeight: 21 },
   userText: { color: 'white' },
   gusText: { color: '#111827' },
+  quickReplies: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickReplyButton: {
+    borderWidth: 1,
+    borderColor: '#059669',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: '#ECFDF5',
+  },
+  quickReplyButtonSelected: {
+    borderColor: '#111827',
+    backgroundColor: '#111827',
+  },
+  quickReplyButtonDisabled: {
+    opacity: 0.45,
+  },
+  quickReplyText: {
+    color: '#047857',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  quickReplyTextSelected: {
+    color: 'white',
+  },
   category: {
     color: '#6B7280',
     fontSize: 11,

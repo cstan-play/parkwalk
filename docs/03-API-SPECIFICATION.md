@@ -380,6 +380,68 @@ Content-Type: application/json
 }
 ```
 
+### Submit Quick Reply
+
+```http
+POST /gus/quickReply
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "messageId": "uuid",
+  "value": "barely"
+}
+```
+
+The `messageId` must point to one of the authenticated user's Gus messages
+whose `quickReplies` array contains the supplied `value`. The backend marks the
+source message's `selectedReply`, writes the reply to today's
+`user_daily_state`, and creates two thread rows.
+
+**Response 201:**
+
+```json
+{
+  "sourceMessage": {
+    "id": "uuid",
+    "role": "gus",
+    "kind": "gus_notification",
+    "category": "morning_check_in",
+    "content": "Morning. Yesterday was a lot...",
+    "quickReplies": [
+      { "value": "okay", "label": "Surprisingly okay", "dataField": "mood" },
+      { "value": "barely", "label": "Functioning, barely", "dataField": "mood" },
+      { "value": "no", "label": "Please don't talk to me", "dataField": "mood" }
+    ],
+    "selectedReply": "barely",
+    "modelUsed": "claude-haiku-4-5-20251001",
+    "createdAt": "2026-05-08T10:00:00.000Z"
+  },
+  "userMessage": {
+    "id": "uuid",
+    "role": "user",
+    "kind": "user_quick_reply",
+    "category": "morning_check_in",
+    "content": "Functioning, barely",
+    "quickReplies": null,
+    "selectedReply": "barely",
+    "modelUsed": null,
+    "createdAt": "2026-05-08T10:00:05.000Z"
+  },
+  "gusReply": {
+    "id": "uuid",
+    "role": "gus",
+    "kind": "gus_quick_reply_followup",
+    "category": "morning_check_in",
+    "content": "Noted. We're keeping the bar on the floor today.",
+    "quickReplies": null,
+    "selectedReply": null,
+    "modelUsed": "fallback",
+    "createdAt": "2026-05-08T10:00:06.000Z"
+  }
+}
+```
+
 ## Game Entity Endpoints
 
 > **Phase 1 (current) vs this document.** Older subsections below use

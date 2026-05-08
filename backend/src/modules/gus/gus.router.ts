@@ -1,5 +1,6 @@
 import {
   sendChatRequestSchema,
+  submitQuickReplyRequestSchema,
   upsertDogProfileRequestSchema,
   upsertGusPrefsRequestSchema,
 } from '@parkwalk/shared';
@@ -14,6 +15,7 @@ import {
   getOrCreateGusPrefs,
   listMessages,
   sendUserMessage,
+  submitQuickReply,
   upsertDogProfile,
   upsertGusPrefs,
 } from './gus.service.js';
@@ -71,6 +73,21 @@ export function buildGusRouter(): Router {
     asyncHandler(async (req, res) => {
       const ownerName = req.user!.displayName ?? req.user!.username;
       const result = await sendUserMessage(req.user!.id, ownerName, req.body.content);
+      res.status(201).json(result);
+    }),
+  );
+
+  router.post(
+    '/quickReply',
+    validate(submitQuickReplyRequestSchema),
+    asyncHandler(async (req, res) => {
+      const ownerName = req.user!.displayName ?? req.user!.username;
+      const result = await submitQuickReply(
+        req.user!.id,
+        ownerName,
+        req.body.messageId,
+        req.body.value,
+      );
       res.status(201).json(result);
     }),
   );

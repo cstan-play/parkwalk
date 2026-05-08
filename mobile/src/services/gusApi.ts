@@ -7,6 +7,8 @@ import type {
   GusPrefsResponse,
   SendChatRequest,
   SendChatResponse,
+  SubmitQuickReplyRequest,
+  SubmitQuickReplyResponse,
   UpsertDogProfileRequest,
   UpsertGusPrefsRequest,
 } from '@parkwalk/shared';
@@ -42,6 +44,15 @@ export async function fetchChatMessages(): Promise<ChatMessage[]> {
 
 export async function sendChat(request: SendChatRequest): Promise<SendChatResponse> {
   const { data } = await api.post<SendChatResponse>('/api/v1/gus/chat', request, {
+    timeout: CHAT_TIMEOUT_MS,
+  });
+  return data;
+}
+
+export async function submitQuickReply(
+  request: SubmitQuickReplyRequest,
+): Promise<SubmitQuickReplyResponse> {
+  const { data } = await api.post<SubmitQuickReplyResponse>('/api/v1/gus/quickReply', request, {
     timeout: CHAT_TIMEOUT_MS,
   });
   return data;

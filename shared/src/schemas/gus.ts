@@ -118,3 +118,18 @@ export const chatMessagesResponseSchema = z.object({
   items: z.array(chatMessageSchema),
 });
 export type ChatMessagesResponse = z.infer<typeof chatMessagesResponseSchema>;
+
+export const submitQuickReplyRequestSchema = z
+  .object({
+    messageId: uuidSchema,
+    value: z.string().min(1).max(80),
+  })
+  .strict();
+export type SubmitQuickReplyRequest = z.infer<typeof submitQuickReplyRequestSchema>;
+
+export const submitQuickReplyResponseSchema = z.object({
+  userMessage: chatMessageSchema,
+  gusReply: chatMessageSchema,
+  sourceMessage: chatMessageSchema,
+});
+export type SubmitQuickReplyResponse = z.infer<typeof submitQuickReplyResponseSchema>;
