@@ -35,6 +35,11 @@ model User {
   collections     UserCollection[]
   walkSessions    WalkSession[]
   createdEntities GameEntity[]     @relation("EntityCreator")
+  dogProfile      DogProfile?
+  gusPrefs        GusPrefs?
+  chatMessages    ChatMessage[]
+  dailyStates    UserDailyState[]
+  medications    Medication[]
 
   @@map("users")
 }
@@ -168,4 +173,92 @@ model UserCollection {
   @@index([walkClientId])
   @@index([walkSessionId])
   @@map("user_collections")
+}
+
+model DogProfile {
+  userId          String   @id @map("user_id") @db.Uuid
+  dogName         String   @default("Gus") @map("dog_name") @db.VarChar(60)
+  breedCosmetic   String?  @map("breed_cosmetic") @db.VarChar(60)
+  warmth          Float    @default(0.5)
+  verbosity       Float    @default(0.5)
+  political       Float    @default(0.2)
+  competitiveness Float    @default(0.1)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("dog_profiles")
+}
+
+model GusPrefs {
+  userId               String   @id @map("user_id") @db.Uuid
+  morningCheckInTime   String   @default("07:30") @map("morning_check_in_time") @db.VarChar(5)
+  walkReminderTime     String   @default("09:00") @map("walk_reminder_time") @db.VarChar(5)
+  morningEnabled       Boolean  @default(true) @map("morning_enabled")
+  walkEnabled          Boolean  @default(true) @map("walk_enabled")
+  postWalkEnabled      Boolean  @default(true) @map("post_walk_enabled")
+  quietHoursStart      String   @default("21:00") @map("quiet_hours_start") @db.VarChar(5)
+  quietHoursEnd        String   @default("07:00") @map("quiet_hours_end") @db.VarChar(5)
+  timezone             String   @default("Europe/Copenhagen") @db.VarChar(60)
+  swearingCeiling      String   @default("full") @map("swearing_ceiling") @db.VarChar(10)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gus_prefs")
+}
+
+model ChatMessage {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  role            String   @db.VarChar(10)
+  kind            String   @db.VarChar(40)
+  category        String?  @db.VarChar(40)
+  content         String
+  quickReplies    Json?    @map("quick_replies")
+  selectedReply   String?  @map("selected_reply") @db.VarChar(120)
+  modelUsed       String?  @map("model_used") @db.VarChar(60)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("chat_messages")
+}
+
+model UserDailyState {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  date        DateTime @db.Date
+  mood        String?  @db.VarChar(40)
+  motorState  String?  @map("motor_state") @db.VarChar(40)
+  tremor      String?  @db.VarChar(40)
+  energy      String?  @db.VarChar(40)
+  medsTaken   Boolean[] @map("meds_taken")
+  freeNote    String?  @map("free_note")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date], name: "unique_user_daily_state")
+  @@index([userId, date(sort: Desc)])
+  @@map("user_daily_state")
+}
+
+model Medication {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  name            String   @db.VarChar(120)
+  scheduledTimes  String[] @map("scheduled_times")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+  @@map("medications")
 }

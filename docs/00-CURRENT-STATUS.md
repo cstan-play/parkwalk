@@ -38,6 +38,11 @@ The current goal is not feature expansion. The goal is to prove the core loop:
   refresh, hosted HTTPS API settings, and no product debug overlay on the map.
   A build-time `FIELD_DEBUG_OVERLAY` flag can show collapsible field telemetry
   in Metro-free Release builds without covering recovery controls.
+- **Gus personality chat**: personality bible, shared prompt/category
+  registry, backend `/api/v1/gus` profile/prefs/messages/chat endpoints,
+  dog-profile setup, notification permission prompt, and a server-backed mobile
+  chat screen launched from the map are implemented locally. See
+  `17-GUS.md`.
 - **Infrastructure**: Railway backend runbook and local Docker
   Postgres/PostGIS/Redis for integration tests.
 - **Walk recording implementation**: shared walk schemas, backend walk sync/list/detail

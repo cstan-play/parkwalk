@@ -13,6 +13,7 @@
     "clean": "rimraf ios/build ios/Pods ios/Podfile.lock android/build android/.gradle"
   },
   "dependencies": {
+    "@notifee/react-native": "^9.1.2",
     "@parkwalk/shared": "*",
     "@react-native-async-storage/async-storage": "^1.23.1",
     "@react-navigation/native": "^6.1.17",

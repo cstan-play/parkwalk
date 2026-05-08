@@ -433,6 +433,13 @@ export function MapScreen(): JSX.Element {
             </>
           )}
         </View>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.gusButton}
+          onPress={() => navigation.navigate('Chat')}
+        >
+          <Text style={styles.gusButtonText}>Gus</Text>
+        </Pressable>
       </View>
       {activeWalk && recoveryPromptPending ? (
         <View style={styles.recoveryPanel}>
@@ -692,6 +699,19 @@ const styles = StyleSheet.create({
   walkActions: {
     flexDirection: 'row',
     gap: 8,
+  },
+  gusButton: {
+    marginTop: 8,
+    minHeight: 38,
+    borderRadius: 8,
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gusButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '800',
   },
   recoveryPanel: {
     position: 'absolute',

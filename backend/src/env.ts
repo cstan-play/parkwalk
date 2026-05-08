@@ -39,6 +39,11 @@ const coreEnvSchema = z.object({
   NEARBY_AUTO_SEED_RADIUS_METERS: z.coerce.number().int().min(25).max(1000).default(140),
   NEARBY_AUTO_SEED_MIN_DISTANCE_METERS: z.coerce.number().int().min(5).max(500).default(25),
   NEARBY_AUTO_SEED_MIN_SPACING_METERS: z.coerce.number().int().min(5).max(500).default(18),
+
+  // Gus voice — leave unset for the fallback-string path until the SDK
+  // is installed and an Anthropic key is provisioned.
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  GUS_DAILY_TOKEN_LIMIT: z.coerce.number().int().min(0).default(200_000),
 });
 
 const envSchema = z.intersection(coreEnvSchema, walkablePlacementEnvSchema);

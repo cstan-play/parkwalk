@@ -226,6 +226,160 @@ Authorization: Bearer {access_token}
 }
 ```
 
+## Gus Endpoints
+
+> Implemented locally under `/api/v1/gus`. These endpoints are authenticated
+> and use camelCase DTOs from `shared/src/schemas/gus.ts`.
+
+### Get Dog Profile
+
+```http
+GET /gus/profile
+Authorization: Bearer {access_token}
+```
+
+**Response 200:**
+
+```json
+{
+  "profile": {
+    "dogName": "Gus",
+    "breedCosmetic": null,
+    "warmth": 0.5,
+    "verbosity": 0.5,
+    "political": 0.2,
+    "competitiveness": 0.1
+  }
+}
+```
+
+### Upsert Dog Profile
+
+```http
+POST /gus/profile
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "dogName": "Gus",
+  "breedCosmetic": "mutt",
+  "warmth": 0.5,
+  "verbosity": 0.5,
+  "political": 0.2,
+  "competitiveness": 0.1
+}
+```
+
+**Response 200:** same shape as `GET /gus/profile`.
+
+### Get Gus Preferences
+
+```http
+GET /gus/prefs
+Authorization: Bearer {access_token}
+```
+
+**Response 200:**
+
+```json
+{
+  "prefs": {
+    "morningCheckInTime": "07:30",
+    "walkReminderTime": "09:00",
+    "morningEnabled": true,
+    "walkEnabled": true,
+    "postWalkEnabled": true,
+    "quietHoursStart": "21:00",
+    "quietHoursEnd": "07:00",
+    "timezone": "Europe/Copenhagen",
+    "swearingCeiling": "full"
+  }
+}
+```
+
+### Upsert Gus Preferences
+
+```http
+POST /gus/prefs
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "walkReminderTime": "09:30",
+  "walkEnabled": true
+}
+```
+
+**Response 200:** same shape as `GET /gus/prefs`.
+
+### List Gus Messages
+
+```http
+GET /gus/messages
+Authorization: Bearer {access_token}
+```
+
+**Response 200:**
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "role": "gus",
+      "kind": "gus_reply",
+      "category": null,
+      "content": "Brain's not working right now. Try me again.",
+      "quickReplies": null,
+      "selectedReply": null,
+      "modelUsed": "fallback",
+      "createdAt": "2026-05-08T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Send Chat Message
+
+```http
+POST /gus/chat
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "content": "hi"
+}
+```
+
+**Response 201:**
+
+```json
+{
+  "userMessage": {
+    "id": "uuid",
+    "role": "user",
+    "kind": "user_message",
+    "category": null,
+    "content": "hi",
+    "quickReplies": null,
+    "selectedReply": null,
+    "modelUsed": null,
+    "createdAt": "2026-05-08T10:00:00.000Z"
+  },
+  "gusReply": {
+    "id": "uuid",
+    "role": "gus",
+    "kind": "gus_reply",
+    "category": null,
+    "content": "Brain's not working right now. Try me again.",
+    "quickReplies": null,
+    "selectedReply": null,
+    "modelUsed": "fallback",
+    "createdAt": "2026-05-08T10:00:01.000Z"
+  }
+}
+```
+
 ## Game Entity Endpoints
 
 > **Phase 1 (current) vs this document.** Older subsections below use

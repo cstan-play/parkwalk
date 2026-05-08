@@ -122,7 +122,9 @@ docs/
 ├── 12-FIRST-WALK.md            # First end-to-end walk checklist
 ├── 13-BOOTSTRAP-IOS.md         # iOS bootstrap + field-test retros
 ├── 14-DEPLOY-RAILWAY.md        # Railway deploy (monorepo + PostGIS)
-└── 15-WALK-RECORDING.md        # Start/End Walk, path trace, native steps plan
+├── 15-WALK-RECORDING.md        # Start/End Walk, path trace, native steps plan
+├── 16-COMPANION.md             # Spatial dog companion on active walks
+└── 17-GUS.md                   # Gus personality chat + reminder surface
 ```
 
 ## Quick Start (Development)

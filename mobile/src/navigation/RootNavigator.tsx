@@ -2,6 +2,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { Button, StyleSheet, View } from 'react-native';
 
+import { ChatScreen } from '@/screens/ChatScreen';
+import { DogProfileSetupScreen } from '@/screens/DogProfileSetupScreen';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { MapScreen } from '@/screens/MapScreen';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
@@ -20,7 +22,9 @@ export type RootStackParamList = {
   Stats: undefined;
   WalkHistory: undefined;
   WalkDetail: { walkId: string; clientId: string };
+  Chat: undefined;
   Settings: undefined;
+  DogProfileSetup: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -77,10 +81,16 @@ export function RootNavigator(): JSX.Element {
             component={WalkDetailScreen}
             options={{ title: 'Walk Detail' }}
           />
+          <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Gus' }} />
           <Stack.Screen
             name="Settings"
             component={SettingsScreen}
             options={{ title: 'Settings' }}
+          />
+          <Stack.Screen
+            name="DogProfileSetup"
+            component={DogProfileSetupScreen}
+            options={{ title: 'Your dog' }}
           />
         </>
       )}

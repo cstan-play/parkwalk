@@ -7,3 +7,4 @@ export * from './movement.js';
 export * from './collect.js';
 export * from './walk.js';
 export * from './user.js';
+export * from './gus.js';
