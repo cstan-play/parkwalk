@@ -50,6 +50,12 @@ the thread when the screen opens.
   chat completions endpoint with Node `fetch`.
 - Provider selection is controlled by env vars; if no provider key is present,
   Gus still uses fallback strings so smoke tests can run without paid LLM calls.
+- `GET /api/v1/gus/models` lists backend-visible models for the current
+  provider. For xAI, the backend asks `/language-models` first and falls back to
+  `/models`.
+- Settings exposes dropdown-style selectors for the chat model and reminder
+  model. Selections are stored in `gus_prefs.chat_model` and
+  `gus_prefs.notification_model`.
 
 ## Runtime Flow
 
@@ -98,6 +104,10 @@ If `GUS_LLM_PROVIDER` is omitted, the backend auto-picks `xai` when
 `XAI_API_KEY` is present, then `anthropic` when `ANTHROPIC_API_KEY` is present,
 then `fallback`.
 
+The env model values are defaults. Once a user picks a model in Settings, the
+per-user `gus_prefs` model value overrides the env default for that user's Gus
+messages.
+
 ## Message Shapes
 
 The chat screen renders all `chat_messages` rows with the same bubble component
@@ -121,6 +131,7 @@ Included:
 - map entry point
 - inline quick-reply rendering
 - mood/motor/tremor/energy/meds/free-note writes to `user_daily_state`
+- Settings model selectors populated from backend-visible provider models
 
 Deferred:
 
@@ -154,6 +165,8 @@ Manual smoke:
 8. Seed or generate a Gus message with `quickReplies`; tap one and confirm the
    row disables, a user tap appears, Gus follows up, and `user_daily_state`
    updates for today.
+9. Open Settings, choose a chat model from the dropdown, send a Gus message,
+   and confirm `chat_messages.model_used` matches the selected model.
 
 ## Next Sprint
 

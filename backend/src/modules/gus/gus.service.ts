@@ -1,6 +1,8 @@
 import type {
   ChatMessage as SharedChatMessage,
   DogProfile,
+  GusModelOption,
+  GusModelsResponse,
   GusQuickReply,
   GusPrefs,
   SwearingCeiling,
@@ -11,11 +13,17 @@ import { gusQuickReplySchema } from '@parkwalk/shared';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
+import { env } from '../../env.js';
 import { conflict, notFound, validationError } from '../../errors.js';
 import { prisma } from '../../prisma.js';
 
 import { assembleContextForPrompt } from './context.service.js';
-import { generate, type VoiceConversationTurn } from './voice.service.js';
+import {
+  configuredModelForCategory,
+  generate,
+  resolveGusProvider,
+  type VoiceConversationTurn,
+} from './voice.service.js';
 
 const RECENT_HISTORY_LIMIT = 10;
 
@@ -68,6 +76,29 @@ export async function upsertGusPrefs(
   return rowToPrefs(row);
 }
 
+export async function listGusModels(): Promise<GusModelsResponse> {
+  const provider = resolveGusProvider();
+  const chatModel = configuredModelForCategory('chat');
+  const notificationModel = configuredModelForCategory('morning_check_in');
+
+  if (provider !== 'xai') {
+    return {
+      provider,
+      chatModel,
+      notificationModel,
+      items: uniqModelOptions([chatModel, notificationModel]),
+    };
+  }
+
+  const remote = await fetchXaiModelOptions();
+  return {
+    provider,
+    chatModel,
+    notificationModel,
+    items: remote.length > 0 ? remote : uniqModelOptions([chatModel, notificationModel]),
+  };
+}
+
 export async function listMessages(userId: string): Promise<SharedChatMessage[]> {
   const rows = await prisma.chatMessage.findMany({
     where: { userId },
@@ -116,6 +147,7 @@ export async function sendUserMessage(
     categoryKey: 'chat',
     userMessage: content,
     swearingCeiling: prefs.swearingCeiling as SwearingCeiling,
+    modelOverride: prefs.chatModel,
   });
 
   const result = await prisma.$transaction(async (tx) => {
@@ -170,6 +202,7 @@ export async function submitQuickReply(
     categoryKey: 'chat',
     userMessage: `The user tapped this quick reply: "${selected.label}". It records ${selected.dataField}=${selected.value}. Reply once, in one short line. Acknowledge it without therapy-speak.`,
     swearingCeiling: prefs.swearingCeiling as SwearingCeiling,
+    modelOverride: prefs.chatModel,
   });
   const fallback = quickReplyFallback(selected);
   const followupContent = generated.modelUsed === 'fallback' ? fallback : generated.content;
@@ -300,6 +333,34 @@ function quickReplyFallback(reply: GusQuickReply): string {
   }
 }
 
+async function fetchXaiModelOptions(): Promise<GusModelOption[]> {
+  const baseUrl = env.XAI_BASE_URL.replace(/\/$/, '');
+  const headers = {
+    Authorization: `Bearer ${env.XAI_API_KEY ?? ''}`,
+    'Content-Type': 'application/json',
+  };
+
+  for (const path of ['/language-models', '/models']) {
+    try {
+      const res = await fetch(`${baseUrl}${path}`, { headers });
+      if (!res.ok) continue;
+      const data = (await res.json()) as { data?: Array<{ id?: unknown; name?: unknown }> };
+      const ids = (data.data ?? [])
+        .map((m) => (typeof m.id === 'string' ? m.id : typeof m.name === 'string' ? m.name : null))
+        .filter((id): id is string => !!id);
+      if (ids.length > 0) return uniqModelOptions(ids);
+    } catch {
+      // Fall through to the next endpoint/fallback defaults.
+    }
+  }
+
+  return [];
+}
+
+function uniqModelOptions(ids: string[]): GusModelOption[] {
+  return Array.from(new Set(ids.filter(Boolean))).map((id) => ({ id, label: id }));
+}
+
 type ProfileRow = {
   dogName: string;
   breedCosmetic: string | null;
@@ -330,6 +391,8 @@ type PrefsRow = {
   quietHoursEnd: string;
   timezone: string;
   swearingCeiling: string;
+  chatModel: string | null;
+  notificationModel: string | null;
 };
 
 function rowToPrefs(row: PrefsRow): GusPrefs {
@@ -343,6 +406,8 @@ function rowToPrefs(row: PrefsRow): GusPrefs {
     quietHoursEnd: row.quietHoursEnd,
     timezone: row.timezone,
     swearingCeiling: row.swearingCeiling as SwearingCeiling,
+    chatModel: row.chatModel,
+    notificationModel: row.notificationModel,
   };
 }
 

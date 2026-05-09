@@ -292,7 +292,9 @@ Authorization: Bearer {access_token}
     "quietHoursStart": "21:00",
     "quietHoursEnd": "07:00",
     "timezone": "Europe/Copenhagen",
-    "swearingCeiling": "full"
+    "swearingCeiling": "full",
+    "chatModel": null,
+    "notificationModel": null
   }
 }
 ```
@@ -306,11 +308,40 @@ Content-Type: application/json
 
 {
   "walkReminderTime": "09:30",
-  "walkEnabled": true
+  "walkEnabled": true,
+  "chatModel": "grok-4.20-beta-latest-non-reasoning"
 }
 ```
 
 **Response 200:** same shape as `GET /gus/prefs`.
+
+### List Gus Models
+
+```http
+GET /gus/models
+Authorization: Bearer {access_token}
+```
+
+Returns the model IDs visible to the backend for the configured Gus LLM
+provider. With `GUS_LLM_PROVIDER=xai`, the backend calls xAI using
+`XAI_API_KEY`, so the app never receives the provider API key.
+
+**Response 200:**
+
+```json
+{
+  "provider": "xai",
+  "chatModel": "grok-4.3",
+  "notificationModel": "grok-4.3",
+  "items": [
+    { "id": "grok-4.3", "label": "grok-4.3" },
+    {
+      "id": "grok-4.20-beta-latest-non-reasoning",
+      "label": "grok-4.20-beta-latest-non-reasoning"
+    }
+  ]
+}
+```
 
 ### List Gus Messages
 

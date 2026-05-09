@@ -92,6 +92,8 @@ export const gusPrefsSchema = z.object({
   quietHoursEnd: timeOfDayString,
   timezone: z.string().min(1).max(60),
   swearingCeiling: swearingCeilingSchema,
+  chatModel: z.string().min(1).max(120).nullable(),
+  notificationModel: z.string().min(1).max(120).nullable(),
 });
 export type GusPrefs = z.infer<typeof gusPrefsSchema>;
 
@@ -100,6 +102,20 @@ export type UpsertGusPrefsRequest = z.infer<typeof upsertGusPrefsRequestSchema>;
 
 export const gusPrefsResponseSchema = z.object({ prefs: gusPrefsSchema });
 export type GusPrefsResponse = z.infer<typeof gusPrefsResponseSchema>;
+
+export const gusModelOptionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+});
+export type GusModelOption = z.infer<typeof gusModelOptionSchema>;
+
+export const gusModelsResponseSchema = z.object({
+  provider: z.enum(['xai', 'anthropic', 'fallback']),
+  chatModel: z.string(),
+  notificationModel: z.string(),
+  items: z.array(gusModelOptionSchema),
+});
+export type GusModelsResponse = z.infer<typeof gusModelsResponseSchema>;
 
 export const sendChatRequestSchema = z
   .object({

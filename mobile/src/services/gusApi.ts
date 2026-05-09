@@ -3,6 +3,7 @@ import type {
   ChatMessagesResponse,
   DogProfile,
   DogProfileResponse,
+  GusModelsResponse,
   GusPrefs,
   GusPrefsResponse,
   SendChatRequest,
@@ -30,6 +31,11 @@ export async function upsertDogProfile(patch: UpsertDogProfileRequest): Promise<
 export async function fetchGusPrefs(): Promise<GusPrefs> {
   const { data } = await api.get<GusPrefsResponse>('/api/v1/gus/prefs');
   return data.prefs;
+}
+
+export async function fetchGusModels(): Promise<GusModelsResponse> {
+  const { data } = await api.get<GusModelsResponse>('/api/v1/gus/models');
+  return data;
 }
 
 export async function upsertGusPrefs(patch: UpsertGusPrefsRequest): Promise<GusPrefs> {

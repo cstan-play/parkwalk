@@ -13,6 +13,7 @@ import { validate } from '../../middleware/validate.js';
 import {
   getOrCreateDogProfile,
   getOrCreateGusPrefs,
+  listGusModels,
   listMessages,
   sendUserMessage,
   submitQuickReply,
@@ -64,6 +65,14 @@ export function buildGusRouter(): Router {
     asyncHandler(async (req, res) => {
       const items = await listMessages(req.user!.id);
       res.json({ items });
+    }),
+  );
+
+  router.get(
+    '/models',
+    asyncHandler(async (_req, res) => {
+      const result = await listGusModels();
+      res.json(result);
     }),
   );
 

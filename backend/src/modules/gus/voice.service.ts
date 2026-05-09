@@ -33,6 +33,7 @@ export interface GenerateInput {
    */
   userMessage?: string;
   swearingCeiling: SwearingCeiling;
+  modelOverride?: string | null;
 }
 
 export interface GenerateOutput {
@@ -70,8 +71,8 @@ function loadAnthropic(): Promise<unknown | null> {
 
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const categoryKey = input.categoryKey ?? 'chat';
-  const cfg = getCategoryConfig(categoryKey);
-  const provider = resolveProvider();
+  const provider = resolveGusProvider();
+  const model = input.modelOverride?.trim() || configuredModelForCategory(categoryKey);
 
   const { systemPrompt, fewShotMessages } = buildSystemPrompt({
     dogProfile: input.dogProfile,
@@ -100,13 +101,13 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     const fullSystem = extraSystem ? `${systemPrompt}\n\n${extraSystem}` : systemPrompt;
     if (provider === 'xai') {
       return await callXai({
-        model: xaiModelForCategory(categoryKey),
+        model,
         system: fullSystem,
         messages,
       });
     }
     return await callAnthropic({
-      model: cfg.model,
+      model,
       system: fullSystem,
       messages,
     });
@@ -144,11 +145,11 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const filtered = applyPostFilter(raw, input.swearingCeiling);
   return {
     content: filtered.text,
-    modelUsed: provider === 'xai' ? xaiModelForCategory(categoryKey) : cfg.model,
+    modelUsed: model,
   };
 }
 
-function resolveProvider(): GusProvider {
+export function resolveGusProvider(): GusProvider {
   if (env.GUS_LLM_PROVIDER) {
     if (env.GUS_LLM_PROVIDER === 'xai' && !env.XAI_API_KEY) return 'fallback';
     if (env.GUS_LLM_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) return 'fallback';
@@ -161,6 +162,13 @@ function resolveProvider(): GusProvider {
 
 function xaiModelForCategory(categoryKey: NonNullable<GenerateInput['categoryKey']>): string {
   return categoryKey === 'chat' ? env.GUS_XAI_CHAT_MODEL : env.GUS_XAI_NOTIFICATION_MODEL;
+}
+
+export function configuredModelForCategory(
+  categoryKey: NonNullable<GenerateInput['categoryKey']>,
+): string {
+  const cfg = getCategoryConfig(categoryKey);
+  return resolveGusProvider() === 'xai' ? xaiModelForCategory(categoryKey) : cfg.model;
 }
 
 function fallbackForCategory(categoryKey: NonNullable<GenerateInput['categoryKey']>): GenerateOutput {

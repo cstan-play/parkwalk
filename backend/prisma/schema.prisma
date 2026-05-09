@@ -202,6 +202,8 @@ model GusPrefs {
   quietHoursEnd        String   @default("07:00") @map("quiet_hours_end") @db.VarChar(5)
   timezone             String   @default("Europe/Copenhagen") @db.VarChar(60)
   swearingCeiling      String   @default("full") @map("swearing_ceiling") @db.VarChar(10)
+  chatModel            String?  @map("chat_model") @db.VarChar(120)
+  notificationModel    String?  @map("notification_model") @db.VarChar(120)
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
