@@ -14,17 +14,32 @@ type NotifeeEvent = {
 type NotifeeApi = {
   EventType: { PRESS: number };
   onForegroundEvent: (handler: (event: NotifeeEvent) => void) => () => void;
-  onBackgroundEvent: (handler: (event: NotifeeEvent) => Promise<void>) => void;
   getInitialNotification?: () => Promise<{ notification?: { data?: Record<string, unknown> } } | null>;
 };
+
+type NotifeeNativeApi = Pick<NotifeeApi, 'onForegroundEvent' | 'getInitialNotification'>;
+
+type NotifeeModule = {
+  default?: NotifeeNativeApi;
+  EventType?: NotifeeApi['EventType'];
+} & Partial<NotifeeNativeApi>;
 
 let notifeeCache: NotifeeApi | null | undefined;
 function tryLoadNotifee(): NotifeeApi | null {
   if (notifeeCache !== undefined) return notifeeCache;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const mod = require('@notifee/react-native');
-    notifeeCache = (mod.default ?? mod) as NotifeeApi;
+    const mod = require('@notifee/react-native') as NotifeeModule;
+    const nativeApi = mod.default ?? mod;
+    if (!nativeApi.onForegroundEvent || !mod.EventType) {
+      notifeeCache = null;
+      return notifeeCache;
+    }
+    notifeeCache = {
+      onForegroundEvent: nativeApi.onForegroundEvent.bind(nativeApi),
+      getInitialNotification: nativeApi.getInitialNotification?.bind(nativeApi),
+      EventType: mod.EventType,
+    };
   } catch {
     notifeeCache = null;
   }
@@ -35,29 +50,28 @@ export function registerGusForegroundNotificationHandler(): () => void {
   const api = tryLoadNotifee();
   if (!api) return () => undefined;
 
-  return api.onForegroundEvent((event) => {
-    if (event.type !== api.EventType.PRESS) return;
-    const category = parseCategory(event.detail.notification?.data?.category);
-    if (category) void openChatForCategory(category);
-  });
-}
-
-export function registerGusBackgroundNotificationHandler(): void {
-  const api = tryLoadNotifee();
-  if (!api) return;
-
-  api.onBackgroundEvent(async (event) => {
-    if (event.type !== api.EventType.PRESS) return;
-    const category = parseCategory(event.detail.notification?.data?.category);
-    if (category) await AsyncStorage.setItem(PENDING_CATEGORY_KEY, category);
-  });
+  try {
+    return api.onForegroundEvent((event) => {
+      if (event.type !== api.EventType.PRESS) return;
+      const category = parseCategory(event.detail.notification?.data?.category);
+      if (category) void openChatForCategory(category);
+    });
+  } catch {
+    return () => undefined;
+  }
 }
 
 export async function consumeInitialGusNotification(): Promise<void> {
   const api = tryLoadNotifee();
-  const initial = api?.getInitialNotification ? await api.getInitialNotification() : null;
+  let initial: { notification?: { data?: Record<string, unknown> } } | null = null;
+  try {
+    initial = api?.getInitialNotification ? await api.getInitialNotification() : null;
+  } catch {
+    initial = null;
+  }
   const initialCategory = parseCategory(initial?.notification?.data?.category);
   if (initialCategory) {
+    await AsyncStorage.removeItem(PENDING_CATEGORY_KEY);
     await openChatForCategory(initialCategory);
     return;
   }

@@ -145,6 +145,7 @@ function MessageBubble({
   const isUser = message.role === 'user';
   const replies = message.role === 'gus' ? message.quickReplies ?? [] : [];
   const hasReplies = replies.length > 0;
+  const selectedReply = replies.find((reply) => reply.value === message.selectedReply) ?? null;
   const repliesDisabled = replying || !!message.selectedReply;
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.gusRow]}>
@@ -156,7 +157,7 @@ function MessageBubble({
         {hasReplies ? (
           <QuickReplies
             replies={replies}
-            selectedReply={message.selectedReply}
+            selectedReply={selectedReply}
             disabled={repliesDisabled}
             onPress={onQuickReply}
           />
@@ -176,14 +177,24 @@ function QuickReplies({
   onPress,
 }: {
   replies: GusQuickReply[];
-  selectedReply: string | null;
+  selectedReply: GusQuickReply | null;
   disabled: boolean;
   onPress: (value: string) => void;
 }): JSX.Element {
+  if (selectedReply) {
+    return (
+      <View style={styles.selectedReplyRow}>
+        <Text style={styles.selectedReplyLabel}>Selected</Text>
+        <View style={styles.selectedReplyPill}>
+          <Text style={styles.selectedReplyText}>{selectedReply.label}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.quickReplies}>
       {replies.map((reply) => {
-        const selected = selectedReply === reply.value;
         return (
           <Pressable
             key={`${reply.dataField}:${reply.value}`}
@@ -191,19 +202,11 @@ function QuickReplies({
             disabled={disabled}
             style={[
               styles.quickReplyButton,
-              selected ? styles.quickReplyButtonSelected : null,
-              disabled && !selected ? styles.quickReplyButtonDisabled : null,
+              disabled ? styles.quickReplyButtonDisabled : null,
             ]}
             onPress={() => onPress(reply.value)}
           >
-            <Text
-              style={[
-                styles.quickReplyText,
-                selected ? styles.quickReplyTextSelected : null,
-              ]}
-            >
-              {reply.label}
-            </Text>
+            <Text style={styles.quickReplyText}>{reply.label}</Text>
           </Pressable>
         );
       })}
@@ -287,10 +290,6 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: '#ECFDF5',
   },
-  quickReplyButtonSelected: {
-    borderColor: '#111827',
-    backgroundColor: '#111827',
-  },
   quickReplyButtonDisabled: {
     opacity: 0.45,
   },
@@ -299,9 +298,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  quickReplyTextSelected: {
-    color: 'white',
+  selectedReplyRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  selectedReplyLabel: { color: '#6B7280', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  selectedReplyPill: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: '#111827',
   },
+  selectedReplyText: { color: 'white', fontSize: 13, fontWeight: '700' },
   category: {
     color: '#6B7280',
     fontSize: 11,

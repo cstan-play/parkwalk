@@ -11,7 +11,11 @@ import { useEffect, useState } from 'react';
 type AuthStatus = 'unknown' | 'authorized' | 'denied' | 'provisional' | 'unavailable';
 
 interface NotifeeApi {
-  requestPermission: () => Promise<{ authorizationStatus: number }>;
+  requestPermission: (permissions?: {
+    alert?: boolean;
+    badge?: boolean;
+    sound?: boolean;
+  }) => Promise<{ authorizationStatus: number }>;
   getNotificationSettings: () => Promise<{ authorizationStatus: number }>;
   AuthorizationStatus: {
     NOT_DETERMINED: number;
@@ -21,13 +25,29 @@ interface NotifeeApi {
   };
 }
 
+type NotifeeNativeApi = Pick<NotifeeApi, 'requestPermission' | 'getNotificationSettings'>;
+
+type NotifeeModule = {
+  default?: NotifeeNativeApi;
+  AuthorizationStatus?: NotifeeApi['AuthorizationStatus'];
+} & Partial<NotifeeNativeApi>;
+
 let notifeeCache: NotifeeApi | null | undefined;
 function tryLoadNotifee(): NotifeeApi | null {
   if (notifeeCache !== undefined) return notifeeCache;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const mod = require('@notifee/react-native');
-    notifeeCache = (mod.default ?? mod) as NotifeeApi;
+    const mod = require('@notifee/react-native') as NotifeeModule;
+    const nativeApi = mod.default ?? mod;
+    if (!nativeApi.requestPermission || !nativeApi.getNotificationSettings || !mod.AuthorizationStatus) {
+      notifeeCache = null;
+      return notifeeCache;
+    }
+    notifeeCache = {
+      requestPermission: nativeApi.requestPermission.bind(nativeApi),
+      getNotificationSettings: nativeApi.getNotificationSettings.bind(nativeApi),
+      AuthorizationStatus: mod.AuthorizationStatus,
+    };
   } catch {
     notifeeCache = null;
   }
@@ -44,15 +64,23 @@ function mapStatus(api: NotifeeApi, raw: number): AuthStatus {
 export async function requestNotificationPermission(): Promise<AuthStatus> {
   const api = tryLoadNotifee();
   if (!api) return 'unavailable';
-  const result = await api.requestPermission();
-  return mapStatus(api, result.authorizationStatus);
+  try {
+    const result = await api.requestPermission({ alert: true, badge: true, sound: true });
+    return mapStatus(api, result.authorizationStatus);
+  } catch {
+    return 'unavailable';
+  }
 }
 
 export async function readNotificationStatus(): Promise<AuthStatus> {
   const api = tryLoadNotifee();
   if (!api) return 'unavailable';
-  const result = await api.getNotificationSettings();
-  return mapStatus(api, result.authorizationStatus);
+  try {
+    const result = await api.getNotificationSettings();
+    return mapStatus(api, result.authorizationStatus);
+  } catch {
+    return 'unavailable';
+  }
 }
 
 export function useNotificationPermission(): {

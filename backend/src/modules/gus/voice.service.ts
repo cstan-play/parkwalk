@@ -142,7 +142,8 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     return fallbackForCategory(categoryKey);
   }
 
-  const filtered = applyPostFilter(raw, input.swearingCeiling);
+  const filtered = applyPostFilter(cleanGeneratedText(raw), input.swearingCeiling);
+  if (!filtered.text) return fallbackForCategory(categoryKey);
   return {
     content: filtered.text,
     modelUsed: model,
@@ -258,4 +259,12 @@ async function callXai(input: {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function cleanGeneratedText(raw: string): string {
+  return raw
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/^\s*(?:\*\*)?gus(?:\*\*)?\s*:\s*/i, '')
+    .replace(/^\s*gus\s*:\s*/i, '')
+    .trim();
 }

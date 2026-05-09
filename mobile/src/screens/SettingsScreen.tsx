@@ -150,8 +150,13 @@ export function SettingsScreen(): JSX.Element {
     setSavingReminders(true);
     try {
       await saveGusPrefs(patch);
-      await rescheduleAllGusNotifications();
-      Alert.alert('Saved', 'Gus reminders rescheduled.');
+      const result = await rescheduleAllGusNotifications();
+      Alert.alert(
+        'Saved',
+        result.scheduled
+          ? 'Gus reminders rescheduled.'
+          : `Reminder settings saved, but nothing was scheduled: ${scheduleReasonText(result.reason)}`,
+      );
     } catch (err) {
       Alert.alert('Could not save reminders', describeApiError(err));
     } finally {
@@ -162,8 +167,13 @@ export function SettingsScreen(): JSX.Element {
   async function testNotification(category: GusNotificationCategory): Promise<void> {
     setTestCategory(category);
     try {
-      await scheduleTestGusNotification(category);
-      Alert.alert('Scheduled', 'Test notification will fire in about 30 seconds.');
+      const result = await scheduleTestGusNotification(category);
+      Alert.alert(
+        result.scheduled ? 'Scheduled' : 'Not scheduled',
+        result.scheduled
+          ? 'Test notification will fire in about 30 seconds.'
+          : scheduleReasonText(result.reason),
+      );
     } catch (err) {
       Alert.alert('Could not schedule test', describeApiError(err));
     } finally {
@@ -354,6 +364,23 @@ function TimeField({
 
 function isValidTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function scheduleReasonText(reason: string): string {
+  switch (reason) {
+    case 'unavailable':
+      return 'the native notification module is unavailable in this build.';
+    case 'permission_denied':
+      return 'notification permission is not granted.';
+    case 'prefs_missing':
+      return 'Gus preferences could not be loaded.';
+    case 'disabled':
+      return 'this reminder is disabled.';
+    case 'quiet_hours':
+      return 'the selected time is inside quiet hours.';
+    default:
+      return reason;
+  }
 }
 
 function ModelDropdown({

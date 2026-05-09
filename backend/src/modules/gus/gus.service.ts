@@ -264,6 +264,7 @@ export async function fireNotificationMessage(
     context,
     history,
     categoryKey: category,
+    userMessage: notificationPrompt(category),
     swearingCeiling: prefs.swearingCeiling as SwearingCeiling,
     modelOverride: prefs.notificationModel,
   });
@@ -370,6 +371,33 @@ function quickReplyFallback(reply: GusQuickReply): string {
       return 'Good. I noticed. Briefly mature of me.';
     default:
       return 'Noted. Filed under things I pretend not to care about.';
+  }
+}
+
+function notificationPrompt(category: GusNotificationCategory): string {
+  switch (category) {
+    case 'morning_check_in':
+      return [
+        'Write the morning check-in message now.',
+        'Do not continue or quote prior chat messages.',
+        'Do not print quick-reply labels, button values, markdown, or code fences.',
+        'One short Gus message only.',
+      ].join(' ');
+    case 'walk_reminder':
+      return [
+        'Write the walk reminder message now.',
+        'Do not continue or quote prior chat messages.',
+        'Do not print quick-reply labels, markdown, or code fences.',
+        'One short Gus message only.',
+      ].join(' ');
+    case 'post_walk_debrief':
+      return [
+        'Write the post-walk debrief message now.',
+        'A walk just ended recently; this is not a morning check-in.',
+        'Do not continue or quote prior chat messages.',
+        'Do not print quick-reply labels, button values, markdown, or code fences.',
+        'One short Gus message only.',
+      ].join(' ');
   }
 }
 
