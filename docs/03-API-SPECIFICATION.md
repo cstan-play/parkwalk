@@ -490,6 +490,12 @@ backend generates the full Gus chat message, persists it as
 `kind = "gus_notification"`, attaches the category's quick replies, and returns
 the new row.
 
+The submitted `category` is authoritative metadata. Clients should render the
+message label from `message.category` (for example `Gus - Post walk debrief`)
+and treat `content` as body copy only. The backend does not ask the LLM to
+choose the message type, and notification generation excludes recent chat
+history so a debrief cannot accidentally continue a stale check-in thread.
+
 **Response 201:**
 
 ```json

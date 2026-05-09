@@ -150,7 +150,9 @@ function MessageBubble({
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.gusRow]}>
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.gusBubble]}>
-        {message.category ? <Text style={styles.category}>{formatCategory(message.category)}</Text> : null}
+        <Text style={[styles.messageHeader, isUser ? styles.userHeader : styles.gusHeader]}>
+          {formatMessageHeader(message)}
+        </Text>
         <Text style={[styles.messageText, isUser ? styles.userText : styles.gusText]}>
           {message.content}
         </Text>
@@ -225,9 +227,21 @@ function ThinkingBubble(): JSX.Element {
   );
 }
 
-function formatCategory(category: ChatMessage['category']): string {
-  if (!category) return '';
-  return category.replace(/_/g, ' ');
+function formatMessageHeader(message: ChatMessage): string {
+  const sender = message.role === 'gus' ? 'Gus' : 'You';
+  if (!message.category) return sender;
+  return `${sender} - ${formatCategory(message.category)}`;
+}
+
+function formatCategory(category: NonNullable<ChatMessage['category']>): string {
+  switch (category) {
+    case 'morning_check_in':
+      return 'Morning check-in';
+    case 'walk_reminder':
+      return 'Walk reminder';
+    case 'post_walk_debrief':
+      return 'Post walk debrief';
+  }
 }
 
 function formatTime(iso: string): string {
@@ -307,13 +321,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#111827',
   },
   selectedReplyText: { color: 'white', fontSize: 13, fontWeight: '700' },
-  category: {
-    color: '#6B7280',
+  messageHeader: {
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 4,
-    textTransform: 'uppercase',
   },
+  gusHeader: { color: '#6B7280' },
+  userHeader: { color: '#9CA3AF' },
   timestamp: { marginTop: 5, fontSize: 11, alignSelf: 'flex-end' },
   userTimestamp: { color: '#D1D5DB' },
   gusTimestamp: { color: '#9CA3AF' },

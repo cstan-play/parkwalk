@@ -47,7 +47,9 @@ The current goal is not feature expansion. The goal is to prove the core loop:
   and Settings can persist per-user chat/reminder model selections. Local
   scheduled notifications are wired for morning check-in, walk reminder, and
   post-walk debrief; tapping a banner opens Chat and persists the full Gus
-  message. See `17-GUS.md`.
+  message. Notification category labels are app-owned metadata (`Gus - Morning
+  check-in`, `Gus - Walk reminder`, `Gus - Post walk debrief`) rather than
+  model-generated text. See `17-GUS.md`.
 - **Infrastructure**: Railway backend runbook and local Docker
   Postgres/PostGIS/Redis for integration tests.
 - **Walk recording implementation**: shared walk schemas, backend walk sync/list/detail

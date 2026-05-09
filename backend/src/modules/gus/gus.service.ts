@@ -256,13 +256,12 @@ export async function fireNotificationMessage(
   const profile = await getOrCreateDogProfile(userId);
   const prefs = await getOrCreateGusPrefs(userId);
   const context = await assembleContextForPrompt({ userId, ownerName });
-  const history = await buildRecentHistory(userId);
   const cfg = getCategoryConfig(category);
 
   const generated = await generate({
     dogProfile: profile,
     context,
-    history,
+    history: [],
     categoryKey: category,
     userMessage: notificationPrompt(category),
     swearingCeiling: prefs.swearingCeiling as SwearingCeiling,
@@ -394,6 +393,7 @@ function notificationPrompt(category: GusNotificationCategory): string {
       return [
         'Write the post-walk debrief message now.',
         'A walk just ended recently; this is not a morning check-in.',
+        'Do not call it an evening check-in, morning check-in, status check, or check-in.',
         'Do not continue or quote prior chat messages.',
         'Do not print quick-reply labels, button values, markdown, or code fences.',
         'One short Gus message only.',

@@ -264,7 +264,6 @@ async function callXai(input: {
 function cleanGeneratedText(raw: string): string {
   return raw
     .replace(/```[\s\S]*?```/g, '')
-    .replace(/^\s*(?:\*\*)?gus(?:\*\*)?\s*:\s*/i, '')
-    .replace(/^\s*gus\s*:\s*/i, '')
+    .replace(/^\s*(?:\*\*)?(?:gus|human|assistant|user|dog)(?:\*\*)?\s*:\s*/i, '')
     .trim();
 }

@@ -62,6 +62,10 @@ the thread when the screen opens.
 - `POST /api/v1/gus/notification/fire` generates and persists a
   `gus_notification` row for `morning_check_in`, `walk_reminder`, or
   `post_walk_debrief`.
+- Notification category identity is structural: the backend stores the
+  requested `category` on the row, and the mobile UI renders labels like
+  `Gus - Post walk debrief` from that field. The LLM only writes `content`;
+  it does not decide whether a message is a check-in, reminder, or debrief.
 - `mobile/src/notifications/scheduler.ts` schedules local Notifee trigger
   notifications from `gus_prefs`.
 - `mobile/src/notifications/handler.ts` opens Chat on notification tap and
@@ -104,6 +108,13 @@ Notification flow:
 6. Mobile appends it to the chat thread; category quick replies render under
    the message.
 
+The notification generation call intentionally does **not** include recent chat
+history. The category itself already carries the conversational intent, and
+including prior chat caused models to continue stale threads (for example
+turning a post-walk debrief into a check-in). Context still includes dog
+profile, walk state, time, and daily state; only previous chat turns are
+excluded for notification-triggered rows.
+
 If no LLM key is configured, the backend deliberately returns a fallback string
 so the route can still be smoke-tested end to end.
 
@@ -139,11 +150,19 @@ and keeps the row discriminators visible in code for later sprints.
 
 | `kind` | `role` | Current behavior |
 |---|---|---|
-| `user_message` | `user` | Right-aligned user bubble |
-| `gus_reply` | `gus` | Left-aligned Gus bubble |
-| `gus_notification` | `gus` | Created when the user taps a local Gus notification |
-| `user_quick_reply` | `user` | Right-aligned row created after tapping a quick reply |
-| `gus_quick_reply_followup` | `gus` | One-line Gus acknowledgment after a quick reply |
+| `user_message` | `user` | Right-aligned user bubble with `You` header |
+| `gus_reply` | `gus` | Left-aligned Gus bubble with `Gus` header |
+| `gus_notification` | `gus` | Created when the user taps a local Gus notification; rendered as `Gus - {category label}` |
+| `user_quick_reply` | `user` | Right-aligned row created after tapping a quick reply; rendered as `You - {category label}` when linked to a notification |
+| `gus_quick_reply_followup` | `gus` | One-line Gus acknowledgment after a quick reply; rendered as `Gus - {category label}` when linked to a notification |
+
+Category labels are currently:
+
+| `category` | UI label |
+|---|---|
+| `morning_check_in` | `Morning check-in` |
+| `walk_reminder` | `Walk reminder` |
+| `post_walk_debrief` | `Post walk debrief` |
 
 ## Current Boundaries
 
