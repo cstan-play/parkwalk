@@ -57,6 +57,19 @@ the thread when the screen opens.
   model. Selections are stored in `gus_prefs.chat_model` and
   `gus_prefs.notification_model`.
 
+**Sprint 3 — local chat-notifications shipped locally.**
+
+- `POST /api/v1/gus/notification/fire` generates and persists a
+  `gus_notification` row for `morning_check_in`, `walk_reminder`, or
+  `post_walk_debrief`.
+- `mobile/src/notifications/scheduler.ts` schedules local Notifee trigger
+  notifications from `gus_prefs`.
+- `mobile/src/notifications/handler.ts` opens Chat on notification tap and
+  asks the backend to create the full Gus message.
+- Settings includes reminder toggles, HH:MM time fields, quiet hours, and
+  test buttons that fire in about 30 seconds.
+- Ending a walk schedules a one-shot post-walk debrief notification.
+
 ## Runtime Flow
 
 1. User opens Map and taps `Gus`.
@@ -79,6 +92,17 @@ Quick-reply flow:
 6. Backend marks the original message selected, creates the user tap row, and
    creates Gus's follow-up row.
 7. Mobile disables the button row and appends the two new rows.
+
+Notification flow:
+
+1. App launch or Settings save schedules enabled local notifications.
+2. iOS shows the stock line from `categories.ts` at the trigger time.
+3. User taps the notification.
+4. App opens Chat and calls `POST /api/v1/gus/notification/fire`.
+5. Backend generates the real Gus message with the selected reminder model,
+   persists it with `kind='gus_notification'`, and returns it.
+6. Mobile appends it to the chat thread; category quick replies render under
+   the message.
 
 If no LLM key is configured, the backend deliberately returns a fallback string
 so the route can still be smoke-tested end to end.
@@ -117,7 +141,7 @@ and keeps the row discriminators visible in code for later sprints.
 |---|---|---|
 | `user_message` | `user` | Right-aligned user bubble |
 | `gus_reply` | `gus` | Left-aligned Gus bubble |
-| `gus_notification` | `gus` | Not generated yet; renderer already shows category tag if present |
+| `gus_notification` | `gus` | Created when the user taps a local Gus notification |
 | `user_quick_reply` | `user` | Right-aligned row created after tapping a quick reply |
 | `gus_quick_reply_followup` | `gus` | One-line Gus acknowledgment after a quick reply |
 
@@ -132,10 +156,12 @@ Included:
 - inline quick-reply rendering
 - mood/motor/tremor/energy/meds/free-note writes to `user_daily_state`
 - Settings model selectors populated from backend-visible provider models
+- local scheduled notifications for morning check-in and walk reminder
+- one-shot post-walk debrief notification after End Walk
+- Settings test buttons for all three notification categories
 
 Deferred:
 
-- local notification scheduling and `POST /gus/notification/fire`
 - message ratings
 - offline chat cache
 - pagination
@@ -167,13 +193,18 @@ Manual smoke:
    updates for today.
 9. Open Settings, choose a chat model from the dropdown, send a Gus message,
    and confirm `chat_messages.model_used` matches the selected model.
+10. Open Settings, tap `Test morning`, background or lock the app, wait about
+    30 seconds, tap the notification, and confirm a `morning_check_in`
+    `gus_notification` appears in chat with mood quick replies.
+11. Repeat with `Test walk` and `Test debrief`.
+12. End a normal walk and confirm a post-walk debrief notification is scheduled
+    for about 10 minutes later.
 
 ## Next Sprint
 
-Sprint 3 should add scheduled chat-notifications:
+Sprint 4 should refine scheduled chat-notifications:
 
-- local Notifee scheduling for morning check-in, walk reminder, and post-walk
-  debrief
-- stock-line notification banners from `categories.ts`
-- `POST /api/v1/gus/notification/fire`
-- tap notification -> open chat -> generate/persist a `gus_notification`
+- replace HH:MM text fields with native time pickers
+- add duplicate-tap/idempotency protection for notification fire
+- add better pending-notification recovery telemetry
+- dogfood quiet-hour edge cases before expanding categories

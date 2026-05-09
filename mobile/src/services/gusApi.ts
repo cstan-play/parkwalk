@@ -3,6 +3,8 @@ import type {
   ChatMessagesResponse,
   DogProfile,
   DogProfileResponse,
+  FireNotificationRequest,
+  FireNotificationResponse,
   GusModelsResponse,
   GusPrefs,
   GusPrefsResponse,
@@ -59,6 +61,15 @@ export async function submitQuickReply(
   request: SubmitQuickReplyRequest,
 ): Promise<SubmitQuickReplyResponse> {
   const { data } = await api.post<SubmitQuickReplyResponse>('/api/v1/gus/quickReply', request, {
+    timeout: CHAT_TIMEOUT_MS,
+  });
+  return data;
+}
+
+export async function fireGusNotification(
+  request: FireNotificationRequest,
+): Promise<FireNotificationResponse> {
+  const { data } = await api.post<FireNotificationResponse>('/api/v1/gus/notification/fire', request, {
     timeout: CHAT_TIMEOUT_MS,
   });
   return data;

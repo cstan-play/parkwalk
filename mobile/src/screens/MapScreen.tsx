@@ -14,6 +14,7 @@ import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { useMovementDetection } from '@/hooks/useMovementDetection';
 import { useWalkSession } from '@/hooks/useWalkSession';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { schedulePostWalkDebrief } from '@/notifications/scheduler';
 import { onRetry } from '@/services/apiClient';
 import { collectEntity, fetchNearby } from '@/services/entitiesApi';
 import {
@@ -301,6 +302,7 @@ export function MapScreen(): JSX.Element {
   );
   const endAndOpenWalk = useCallback(async () => {
     const completed = await endWalk();
+    if (completed) void schedulePostWalkDebrief();
     openCompletedWalk(completed);
   }, [endWalk, openCompletedWalk]);
 

@@ -473,6 +473,45 @@ source message's `selectedReply`, writes the reply to today's
 }
 ```
 
+### Fire Gus Notification
+
+```http
+POST /gus/notification/fire
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "category": "morning_check_in"
+}
+```
+
+Called by the app after the user taps a local scheduled notification. The
+backend generates the full Gus chat message, persists it as
+`kind = "gus_notification"`, attaches the category's quick replies, and returns
+the new row.
+
+**Response 201:**
+
+```json
+{
+  "message": {
+    "id": "uuid",
+    "role": "gus",
+    "kind": "gus_notification",
+    "category": "morning_check_in",
+    "content": "Morning. Yesterday was a lot...",
+    "quickReplies": [
+      { "value": "okay", "label": "Surprisingly okay", "dataField": "mood" },
+      { "value": "barely", "label": "Functioning, barely", "dataField": "mood" },
+      { "value": "no", "label": "Please don't talk to me", "dataField": "mood" }
+    ],
+    "selectedReply": null,
+    "modelUsed": "grok-4.3",
+    "createdAt": "2026-05-09T10:00:00.000Z"
+  }
+}
+```
+
 ## Game Entity Endpoints
 
 > **Phase 1 (current) vs this document.** Older subsections below use

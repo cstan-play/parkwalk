@@ -1,4 +1,4 @@
-import type { GusModelOption } from '@parkwalk/shared';
+import type { GusModelOption, GusNotificationCategory, UpsertGusPrefsRequest } from '@parkwalk/shared';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -17,6 +18,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { logout as revokeSession } from '@/services/authApi';
+import {
+  rescheduleAllGusNotifications,
+  scheduleTestGusNotification,
+} from '@/notifications/scheduler';
 import { useAuthStore } from '@/stores/authStore';
 import { useGusStore } from '@/stores/gusStore';
 import { normalizeApiBaseUrl, useSettingsStore } from '@/stores/settingsStore';
@@ -41,6 +46,17 @@ export function SettingsScreen(): JSX.Element {
   const [apiUrl, setApiUrl] = useState(settings.savedApiUrl);
   const [signingOut, setSigningOut] = useState(false);
   const [savingModel, setSavingModel] = useState<'chat' | 'notification' | null>(null);
+  const [savingReminders, setSavingReminders] = useState(false);
+  const [testCategory, setTestCategory] = useState<GusNotificationCategory | null>(null);
+  const [reminderDraft, setReminderDraft] = useState({
+    morningEnabled: true,
+    morningCheckInTime: '07:30',
+    walkEnabled: true,
+    walkReminderTime: '09:00',
+    postWalkEnabled: true,
+    quietHoursStart: '21:00',
+    quietHoursEnd: '07:00',
+  });
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -48,6 +64,19 @@ export function SettingsScreen(): JSX.Element {
       void loadGusModels();
     }
   }, [hydrateGus, isAuthenticated, loadGusModels]);
+
+  useEffect(() => {
+    if (!gusPrefs) return;
+    setReminderDraft({
+      morningEnabled: gusPrefs.morningEnabled,
+      morningCheckInTime: gusPrefs.morningCheckInTime,
+      walkEnabled: gusPrefs.walkEnabled,
+      walkReminderTime: gusPrefs.walkReminderTime,
+      postWalkEnabled: gusPrefs.postWalkEnabled,
+      quietHoursStart: gusPrefs.quietHoursStart,
+      quietHoursEnd: gusPrefs.quietHoursEnd,
+    });
+  }, [gusPrefs]);
 
   async function save(): Promise<void> {
     try {
@@ -97,6 +126,51 @@ export function SettingsScreen(): JSX.Element {
     }
   }
 
+  async function saveReminders(): Promise<void> {
+    const patch: UpsertGusPrefsRequest = {
+      morningEnabled: reminderDraft.morningEnabled,
+      morningCheckInTime: reminderDraft.morningCheckInTime,
+      walkEnabled: reminderDraft.walkEnabled,
+      walkReminderTime: reminderDraft.walkReminderTime,
+      postWalkEnabled: reminderDraft.postWalkEnabled,
+      quietHoursStart: reminderDraft.quietHoursStart,
+      quietHoursEnd: reminderDraft.quietHoursEnd,
+    };
+    const timeFields = [
+      patch.morningCheckInTime,
+      patch.walkReminderTime,
+      patch.quietHoursStart,
+      patch.quietHoursEnd,
+    ];
+    if (timeFields.some((t) => !isValidTime(t ?? ''))) {
+      Alert.alert('Invalid time', 'Use HH:MM, for example 07:30.');
+      return;
+    }
+
+    setSavingReminders(true);
+    try {
+      await saveGusPrefs(patch);
+      await rescheduleAllGusNotifications();
+      Alert.alert('Saved', 'Gus reminders rescheduled.');
+    } catch (err) {
+      Alert.alert('Could not save reminders', describeApiError(err));
+    } finally {
+      setSavingReminders(false);
+    }
+  }
+
+  async function testNotification(category: GusNotificationCategory): Promise<void> {
+    setTestCategory(category);
+    try {
+      await scheduleTestGusNotification(category);
+      Alert.alert('Scheduled', 'Test notification will fire in about 30 seconds.');
+    } catch (err) {
+      Alert.alert('Could not schedule test', describeApiError(err));
+    } finally {
+      setTestCategory(null);
+    }
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {isAuthenticated ? (
@@ -131,6 +205,78 @@ export function SettingsScreen(): JSX.Element {
             saving={savingModel === 'notification'}
             onSelect={(modelId) => void chooseModel('notification', modelId)}
           />
+          <Text style={[styles.header, styles.sectionHeader]}>Gus reminders</Text>
+          <ReminderToggle
+            label="Morning check-in"
+            value={reminderDraft.morningEnabled}
+            onValueChange={(morningEnabled) =>
+              setReminderDraft((prev) => ({ ...prev, morningEnabled }))
+            }
+          />
+          <TimeField
+            label="Morning time"
+            value={reminderDraft.morningCheckInTime}
+            onChangeText={(morningCheckInTime) =>
+              setReminderDraft((prev) => ({ ...prev, morningCheckInTime }))
+            }
+          />
+          <ReminderToggle
+            label="Walk reminder"
+            value={reminderDraft.walkEnabled}
+            onValueChange={(walkEnabled) => setReminderDraft((prev) => ({ ...prev, walkEnabled }))}
+          />
+          <TimeField
+            label="Walk time"
+            value={reminderDraft.walkReminderTime}
+            onChangeText={(walkReminderTime) =>
+              setReminderDraft((prev) => ({ ...prev, walkReminderTime }))
+            }
+          />
+          <ReminderToggle
+            label="Post-walk debrief"
+            value={reminderDraft.postWalkEnabled}
+            onValueChange={(postWalkEnabled) =>
+              setReminderDraft((prev) => ({ ...prev, postWalkEnabled }))
+            }
+          />
+          <View style={styles.timeRow}>
+            <TimeField
+              label="Quiet start"
+              value={reminderDraft.quietHoursStart}
+              onChangeText={(quietHoursStart) =>
+                setReminderDraft((prev) => ({ ...prev, quietHoursStart }))
+              }
+            />
+            <TimeField
+              label="Quiet end"
+              value={reminderDraft.quietHoursEnd}
+              onChangeText={(quietHoursEnd) =>
+                setReminderDraft((prev) => ({ ...prev, quietHoursEnd }))
+              }
+            />
+          </View>
+          <Button
+            title={savingReminders ? 'Saving reminders...' : 'Save Gus reminders'}
+            onPress={() => void saveReminders()}
+            disabled={savingReminders}
+          />
+          <View style={styles.testButtons}>
+            <Button
+              title={testCategory === 'morning_check_in' ? 'Scheduling...' : 'Test morning'}
+              onPress={() => void testNotification('morning_check_in')}
+              disabled={testCategory !== null}
+            />
+            <Button
+              title={testCategory === 'walk_reminder' ? 'Scheduling...' : 'Test walk'}
+              onPress={() => void testNotification('walk_reminder')}
+              disabled={testCategory !== null}
+            />
+            <Button
+              title={testCategory === 'post_walk_debrief' ? 'Scheduling...' : 'Test debrief'}
+              onPress={() => void testNotification('post_walk_debrief')}
+              disabled={testCategory !== null}
+            />
+          </View>
           <View style={{ height: 24 }} />
         </>
       ) : null}
@@ -162,6 +308,52 @@ export function SettingsScreen(): JSX.Element {
       ) : null}
     </ScrollView>
   );
+}
+
+function ReminderToggle({
+  label,
+  value,
+  onValueChange,
+}: {
+  label: string;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+}): JSX.Element {
+  return (
+    <View style={styles.toggleRow}>
+      <Text style={styles.toggleLabel}>{label}</Text>
+      <Switch value={value} onValueChange={onValueChange} />
+    </View>
+  );
+}
+
+function TimeField({
+  label,
+  value,
+  onChangeText,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+}): JSX.Element {
+  return (
+    <View style={styles.timeField}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChangeText}
+        autoCapitalize="none"
+        keyboardType="numbers-and-punctuation"
+        maxLength={5}
+        placeholder="HH:MM"
+      />
+    </View>
+  );
+}
+
+function isValidTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function ModelDropdown({
@@ -230,6 +422,7 @@ const styles = StyleSheet.create({
   container: { padding: 24, gap: 6 },
   header: { fontSize: 18, fontWeight: '600' },
   current: { color: '#666', marginBottom: 12 },
+  sectionHeader: { marginTop: 18 },
   label: { fontSize: 13, color: '#666' },
   input: {
     borderWidth: 1,
@@ -280,4 +473,14 @@ const styles = StyleSheet.create({
   modelOptionSelected: { backgroundColor: '#ECFDF5' },
   modelOptionText: { color: '#111', fontSize: 14 },
   modelOptionTextSelected: { color: '#047857', fontWeight: '700' },
+  toggleRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  toggleLabel: { color: '#111', fontSize: 15, fontWeight: '600' },
+  timeField: { flex: 1, gap: 4 },
+  timeRow: { flexDirection: 'row', gap: 10 },
+  testButtons: { gap: 8, marginTop: 8 },
 });

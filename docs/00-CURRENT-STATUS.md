@@ -44,8 +44,10 @@ The current goal is not feature expansion. The goal is to prove the core loop:
   chat screen launched from the map are implemented locally. Quick replies now
   write mood/motor/tremor/energy/meds/free-note values into `user_daily_state`
   and thread a short Gus follow-up. The backend supports xAI/Grok model listing
-  and Settings can persist per-user chat/reminder model selections. See
-  `17-GUS.md`.
+  and Settings can persist per-user chat/reminder model selections. Local
+  scheduled notifications are wired for morning check-in, walk reminder, and
+  post-walk debrief; tapping a banner opens Chat and persists the full Gus
+  message. See `17-GUS.md`.
 - **Infrastructure**: Railway backend runbook and local Docker
   Postgres/PostGIS/Redis for integration tests.
 - **Walk recording implementation**: shared walk schemas, backend walk sync/list/detail

@@ -1,4 +1,5 @@
 import {
+  fireNotificationRequestSchema,
   sendChatRequestSchema,
   submitQuickReplyRequestSchema,
   upsertDogProfileRequestSchema,
@@ -11,6 +12,7 @@ import { asyncHandler } from '../../middleware/asyncHandler.js';
 import { validate } from '../../middleware/validate.js';
 
 import {
+  fireNotificationMessage,
   getOrCreateDogProfile,
   getOrCreateGusPrefs,
   listGusModels,
@@ -97,6 +99,16 @@ export function buildGusRouter(): Router {
         req.body.messageId,
         req.body.value,
       );
+      res.status(201).json(result);
+    }),
+  );
+
+  router.post(
+    '/notification/fire',
+    validate(fireNotificationRequestSchema),
+    asyncHandler(async (req, res) => {
+      const ownerName = req.user!.displayName ?? req.user!.username;
+      const result = await fireNotificationMessage(req.user!.id, ownerName, req.body.category);
       res.status(201).json(result);
     }),
   );

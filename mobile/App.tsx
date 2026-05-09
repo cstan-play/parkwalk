@@ -7,12 +7,19 @@ import Config from 'react-native-config';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '@/services/queryClient';
+import { navigationRef } from '@/navigation/navigationRef';
 import { RootNavigator } from '@/navigation/RootNavigator';
+import {
+  consumeInitialGusNotification,
+  registerGusForegroundNotificationHandler,
+} from '@/notifications/handler';
+import { rescheduleAllGusNotifications } from '@/notifications/scheduler';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 export default function App(): JSX.Element {
   const hydrate = useAuthStore((s) => s.hydrate);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const [ready, setReady] = useState(false);
 
@@ -23,6 +30,17 @@ export default function App(): JSX.Element {
     }
     Promise.all([hydrate(), hydrateSettings()]).finally(() => setReady(true));
   }, [hydrate, hydrateSettings]);
+
+  useEffect(() => {
+    return registerGusForegroundNotificationHandler();
+  }, []);
+
+  useEffect(() => {
+    if (ready && isAuthenticated) {
+      void rescheduleAllGusNotifications();
+      void consumeInitialGusNotification();
+    }
+  }, [isAuthenticated, ready]);
 
   if (!ready) {
     return (
@@ -35,7 +53,7 @@ export default function App(): JSX.Element {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <RootNavigator />
         </NavigationContainer>
       </QueryClientProvider>

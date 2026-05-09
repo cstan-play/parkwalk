@@ -149,3 +149,15 @@ export const submitQuickReplyResponseSchema = z.object({
   sourceMessage: chatMessageSchema,
 });
 export type SubmitQuickReplyResponse = z.infer<typeof submitQuickReplyResponseSchema>;
+
+export const fireNotificationRequestSchema = z
+  .object({
+    category: gusNotificationCategorySchema,
+  })
+  .strict();
+export type FireNotificationRequest = z.infer<typeof fireNotificationRequestSchema>;
+
+export const fireNotificationResponseSchema = z.object({
+  message: chatMessageSchema,
+});
+export type FireNotificationResponse = z.infer<typeof fireNotificationResponseSchema>;

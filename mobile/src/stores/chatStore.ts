@@ -1,7 +1,12 @@
-import type { ChatMessage } from '@parkwalk/shared';
+import type { ChatMessage, GusNotificationCategory } from '@parkwalk/shared';
 import { create } from 'zustand';
 
-import { fetchChatMessages, sendChat, submitQuickReply } from '@/services/gusApi';
+import {
+  fetchChatMessages,
+  fireGusNotification,
+  sendChat,
+  submitQuickReply,
+} from '@/services/gusApi';
 import { describeApiError } from '@/util/describeApiError';
 
 interface ChatStoreState {
@@ -9,11 +14,13 @@ interface ChatStoreState {
   loading: boolean;
   sending: boolean;
   replyingToMessageId: string | null;
+  firingCategory: GusNotificationCategory | null;
   loaded: boolean;
   error: string | null;
   loadMessages: () => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   submitQuickReply: (messageId: string, value: string) => Promise<void>;
+  fireNotification: (category: GusNotificationCategory) => Promise<void>;
   reset: () => void;
 }
 
@@ -22,6 +29,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   loading: false,
   sending: false,
   replyingToMessageId: null,
+  firingCategory: null,
   loaded: false,
   error: null,
 
@@ -72,12 +80,29 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
+  fireNotification: async (category) => {
+    if (get().firingCategory) return;
+
+    set({ firingCategory: category, error: null });
+    try {
+      const result = await fireGusNotification({ category });
+      set((state) => ({
+        messages: [...state.messages, result.message],
+        firingCategory: null,
+        loaded: true,
+      }));
+    } catch (err) {
+      set({ firingCategory: null, error: describeApiError(err) });
+    }
+  },
+
   reset: () =>
     set({
       messages: [],
       loading: false,
       sending: false,
       replyingToMessageId: null,
+      firingCategory: null,
       loaded: false,
       error: null,
     }),

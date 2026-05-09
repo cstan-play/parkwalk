@@ -1,6 +1,7 @@
 import type {
   ChatMessage as SharedChatMessage,
   DogProfile,
+  GusNotificationCategory,
   GusModelOption,
   GusModelsResponse,
   GusQuickReply,
@@ -9,7 +10,7 @@ import type {
   UpsertDogProfileRequest,
   UpsertGusPrefsRequest,
 } from '@parkwalk/shared';
-import { gusQuickReplySchema } from '@parkwalk/shared';
+import { getCategoryConfig, gusQuickReplySchema } from '@parkwalk/shared';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
@@ -117,6 +118,10 @@ export interface SubmitQuickReplyResult {
   userMessage: SharedChatMessage;
   gusReply: SharedChatMessage;
   sourceMessage: SharedChatMessage;
+}
+
+export interface FireNotificationResult {
+  message: SharedChatMessage;
 }
 
 export async function sendUserMessage(
@@ -241,6 +246,41 @@ export async function submitQuickReply(
       gusReply: rowToMessage(gusRow),
     };
   });
+}
+
+export async function fireNotificationMessage(
+  userId: string,
+  ownerName: string,
+  category: GusNotificationCategory,
+): Promise<FireNotificationResult> {
+  const profile = await getOrCreateDogProfile(userId);
+  const prefs = await getOrCreateGusPrefs(userId);
+  const context = await assembleContextForPrompt({ userId, ownerName });
+  const history = await buildRecentHistory(userId);
+  const cfg = getCategoryConfig(category);
+
+  const generated = await generate({
+    dogProfile: profile,
+    context,
+    history,
+    categoryKey: category,
+    swearingCeiling: prefs.swearingCeiling as SwearingCeiling,
+    modelOverride: prefs.notificationModel,
+  });
+
+  const row = await prisma.chatMessage.create({
+    data: {
+      userId,
+      role: 'gus',
+      kind: 'gus_notification',
+      category,
+      content: generated.content,
+      quickReplies: cfg.quickReplies.length > 0 ? cfg.quickReplies : undefined,
+      modelUsed: generated.modelUsed,
+    },
+  });
+
+  return { message: rowToMessage(row) };
 }
 
 async function buildRecentHistory(userId: string): Promise<VoiceConversationTurn[]> {
