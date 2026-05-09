@@ -40,8 +40,15 @@ const coreEnvSchema = z.object({
   NEARBY_AUTO_SEED_MIN_DISTANCE_METERS: z.coerce.number().int().min(5).max(500).default(25),
   NEARBY_AUTO_SEED_MIN_SPACING_METERS: z.coerce.number().int().min(5).max(500).default(18),
 
-  // Gus voice — leave unset for the fallback-string path until the SDK
-  // is installed and an Anthropic key is provisioned.
+  // Gus voice. If provider is unset, the backend auto-picks xAI when
+  // XAI_API_KEY is present, Anthropic when ANTHROPIC_API_KEY is present,
+  // otherwise the fallback-string path.
+  GUS_LLM_PROVIDER: z.enum(['xai', 'anthropic', 'fallback']).optional(),
+  XAI_API_KEY: z.string().min(1).optional(),
+  XAI_BASE_URL: z.string().url().default('https://api.x.ai/v1'),
+  GUS_XAI_CHAT_MODEL: z.string().min(1).default('grok-4.3'),
+  GUS_XAI_NOTIFICATION_MODEL: z.string().min(1).default('grok-4.3'),
+  GUS_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   GUS_DAILY_TOKEN_LIMIT: z.coerce.number().int().min(0).default(200_000),
 });

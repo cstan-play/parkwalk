@@ -37,8 +37,10 @@ export interface GenerateInput {
 
 export interface GenerateOutput {
   content: string;
-  modelUsed: GusModel | 'fallback';
+  modelUsed: string;
 }
+
+type GusProvider = 'xai' | 'anthropic' | 'fallback';
 
 /**
  * Lazy-loaded Anthropic SDK. Held in a module-scoped promise so we only
@@ -69,29 +71,7 @@ function loadAnthropic(): Promise<unknown | null> {
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const categoryKey = input.categoryKey ?? 'chat';
   const cfg = getCategoryConfig(categoryKey);
-
-  // No key set — short-circuit to a fallback. Useful before deps and key
-  // are wired; lets the rest of the stack be smoke-tested.
-  if (!env.ANTHROPIC_API_KEY) {
-    return {
-      content:
-        categoryKey in FALLBACK_REPLIES
-          ? FALLBACK_REPLIES[categoryKey as keyof typeof FALLBACK_REPLIES]
-          : FALLBACK_REPLIES.generic,
-      modelUsed: 'fallback',
-    };
-  }
-
-  const anthropic = (await loadAnthropic()) as null | {
-    messages: {
-      create: (args: unknown) => Promise<{
-        content: Array<{ type: string; text?: string }>;
-      }>;
-    };
-  };
-  if (!anthropic) {
-    return { content: FALLBACK_REPLIES.generic, modelUsed: 'fallback' };
-  }
+  const provider = resolveProvider();
 
   const { systemPrompt, fewShotMessages } = buildSystemPrompt({
     dogProfile: input.dogProfile,
@@ -112,20 +92,24 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     messages.push({ role: 'user', content: '[system: produce the opening line for this category]' });
   }
 
+  if (provider === 'fallback') {
+    return fallbackForCategory(categoryKey);
+  }
+
   const callOnce = async (extraSystem?: string): Promise<string> => {
     const fullSystem = extraSystem ? `${systemPrompt}\n\n${extraSystem}` : systemPrompt;
-    const response = await anthropic.messages.create({
+    if (provider === 'xai') {
+      return await callXai({
+        model: xaiModelForCategory(categoryKey),
+        system: fullSystem,
+        messages,
+      });
+    }
+    return await callAnthropic({
       model: cfg.model,
-      max_tokens: 320,
       system: fullSystem,
       messages,
     });
-    const text = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text ?? '')
-      .join('\n')
-      .trim();
-    return text;
   };
 
   let raw: string;
@@ -133,16 +117,10 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     raw = await callOnce();
   } catch (err) {
     logger.warn(
-      { err: (err as Error).message, category: categoryKey },
-      'Anthropic call failed — using fallback',
+      { err: (err as Error).message, category: categoryKey, provider },
+      'Gus LLM call failed — using fallback',
     );
-    return {
-      content:
-        categoryKey in FALLBACK_REPLIES
-          ? FALLBACK_REPLIES[categoryKey as keyof typeof FALLBACK_REPLIES]
-          : FALLBACK_REPLIES.generic,
-      modelUsed: 'fallback',
-    };
+    return fallbackForCategory(categoryKey);
   }
 
   // Banlist policy: regenerate once with stricter system; if still hit,
@@ -160,15 +138,116 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     hits = findBanlistHits(raw);
   }
   if (hits.length > 0 || !raw) {
-    return {
-      content:
-        categoryKey in FALLBACK_REPLIES
-          ? FALLBACK_REPLIES[categoryKey as keyof typeof FALLBACK_REPLIES]
-          : FALLBACK_REPLIES.generic,
-      modelUsed: 'fallback',
-    };
+    return fallbackForCategory(categoryKey);
   }
 
   const filtered = applyPostFilter(raw, input.swearingCeiling);
-  return { content: filtered.text, modelUsed: cfg.model };
+  return {
+    content: filtered.text,
+    modelUsed: provider === 'xai' ? xaiModelForCategory(categoryKey) : cfg.model,
+  };
+}
+
+function resolveProvider(): GusProvider {
+  if (env.GUS_LLM_PROVIDER) {
+    if (env.GUS_LLM_PROVIDER === 'xai' && !env.XAI_API_KEY) return 'fallback';
+    if (env.GUS_LLM_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) return 'fallback';
+    return env.GUS_LLM_PROVIDER;
+  }
+  if (env.XAI_API_KEY) return 'xai';
+  if (env.ANTHROPIC_API_KEY) return 'anthropic';
+  return 'fallback';
+}
+
+function xaiModelForCategory(categoryKey: NonNullable<GenerateInput['categoryKey']>): string {
+  return categoryKey === 'chat' ? env.GUS_XAI_CHAT_MODEL : env.GUS_XAI_NOTIFICATION_MODEL;
+}
+
+function fallbackForCategory(categoryKey: NonNullable<GenerateInput['categoryKey']>): GenerateOutput {
+  return {
+    content:
+      categoryKey in FALLBACK_REPLIES
+        ? FALLBACK_REPLIES[categoryKey as keyof typeof FALLBACK_REPLIES]
+        : FALLBACK_REPLIES.generic,
+    modelUsed: 'fallback',
+  };
+}
+
+async function callAnthropic(input: {
+  model: GusModel;
+  system: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): Promise<string> {
+  const anthropic = (await loadAnthropic()) as null | {
+    messages: {
+      create: (args: unknown) => Promise<{
+        content: Array<{ type: string; text?: string }>;
+      }>;
+    };
+  };
+  if (!anthropic) throw new Error('Anthropic SDK not loadable');
+
+  const response = await anthropic.messages.create({
+    model: input.model,
+    max_tokens: 320,
+    system: input.system,
+    messages: input.messages,
+  });
+  return response.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('\n')
+    .trim();
+}
+
+async function callXai(input: {
+  model: string;
+  system: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.GUS_LLM_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${env.XAI_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.XAI_API_KEY ?? ''}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: input.model,
+        stream: false,
+        max_tokens: 320,
+        messages: [
+          { role: 'system', content: input.system },
+          ...input.messages,
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`xAI ${response.status}: ${body.slice(0, 500)}`);
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+      return content
+        .map((part) =>
+          typeof part === 'object' && part !== null && 'text' in part
+            ? String((part as { text?: unknown }).text ?? '')
+            : '',
+        )
+        .join('\n')
+        .trim();
+    }
+    throw new Error('xAI response did not include message content');
+  } finally {
+    clearTimeout(timeout);
+  }
 }

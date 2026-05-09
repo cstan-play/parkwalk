@@ -1,9 +1,6 @@
 import type { GusNotificationCategory, GusQuickReply } from '../schemas/gus.js';
 
-export type GusModel =
-  | 'claude-haiku-4-5-20251001'
-  | 'claude-sonnet-4-7'
-  | 'claude-opus-4-7';
+export type GusModel = string;
 
 export interface GusFewShot {
   /** A short label for what this example is meant to teach (e.g. "rain"). */
@@ -16,7 +13,7 @@ export interface GusFewShot {
 
 export interface GusCategoryConfig {
   key: GusNotificationCategory | 'chat';
-  /** Which Claude variant to use for this category. */
+  /** Anthropic default model for this category; other providers can override by env. */
   model: GusModel;
   /**
    * Extra system-prompt text appended on top of the global preamble.

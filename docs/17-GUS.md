@@ -44,6 +44,13 @@ the thread when the screen opens.
 - `mobile/src/stores/chatStore.ts` handles quick-reply submission and replaces
   the source message with the server-updated row so reloads stay consistent.
 
+**Provider update — xAI/Grok supported.**
+
+- `backend/src/modules/gus/voice.service.ts` can call xAI's OpenAI-compatible
+  chat completions endpoint with Node `fetch`.
+- Provider selection is controlled by env vars; if no provider key is present,
+  Gus still uses fallback strings so smoke tests can run without paid LLM calls.
+
 ## Runtime Flow
 
 1. User opens Map and taps `Gus`.
@@ -67,8 +74,29 @@ Quick-reply flow:
    creates Gus's follow-up row.
 7. Mobile disables the button row and appends the two new rows.
 
-If `ANTHROPIC_API_KEY` is unset, the backend deliberately returns a fallback
-string so the route can still be smoke-tested end to end.
+If no LLM key is configured, the backend deliberately returns a fallback string
+so the route can still be smoke-tested end to end.
+
+## LLM Configuration
+
+Set one of these providers on Railway:
+
+```bash
+# Recommended for Grok
+GUS_LLM_PROVIDER=xai
+XAI_API_KEY=...
+XAI_BASE_URL=https://api.x.ai/v1
+GUS_XAI_CHAT_MODEL=grok-4.3
+GUS_XAI_NOTIFICATION_MODEL=grok-4.3
+
+# Optional legacy/default Anthropic path
+GUS_LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+```
+
+If `GUS_LLM_PROVIDER` is omitted, the backend auto-picks `xai` when
+`XAI_API_KEY` is present, then `anthropic` when `ANTHROPIC_API_KEY` is present,
+then `fallback`.
 
 ## Message Shapes
 
@@ -116,8 +144,8 @@ npm --workspace=mobile run typecheck
 Manual smoke:
 
 1. Apply the Gus migration to the target database.
-2. Start the backend with `ANTHROPIC_API_KEY` set for real voice output, or
-   unset for fallback-path testing.
+2. Start the backend with `GUS_LLM_PROVIDER=xai` and `XAI_API_KEY` set for
+   Grok output, or leave provider keys unset for fallback-path testing.
 3. Sign in on mobile.
 4. Tap `Gus` from the map.
 5. Send a short message.
