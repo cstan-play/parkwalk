@@ -1,9 +1,12 @@
-# Mobile app setup (Phase 1 — iOS sideload)
+# Mobile app setup (iOS + Android)
 
 The JavaScript/TypeScript side of the app is committed (screens, hooks,
 services, stores). The **native iOS project** (`mobile/ios/`) is generated
-by the React Native CLI and must be created on your Mac. These steps walk
-you through it.
+by the React Native CLI and must be created on your Mac; the **Android
+project** (`mobile/android/`) is committed and ready to build.
+
+> Sections 1–9 cover iOS. Section 10 covers Android — including the reviewer
+> APK distribution flow.
 
 ## 1. Generate the React Native iOS project
 
@@ -234,3 +237,166 @@ Quick cheat-sheet:
 script in `mobile/ios/**` that references `node_modules` must use
 `../../node_modules/` (two levels up), not `../node_modules/`. npm
 workspaces hoist all deps to the repo root.
+
+## 10. Android setup
+
+The committed `mobile/android/` project builds against the same `mobile/.env`
+and the same hosted backend. You do not need a Mac to build for Android.
+
+> ### iOS protection invariant
+>
+> The current Android work is incremental and should not affect iOS builds.
+> To keep that guarantee, while Android parity is being completed:
+>
+> - **Do not run `pod install`.**
+> - **Do not delete `mobile/ios/Pods/` or `mobile/ios/Podfile.lock`.**
+> - **Do not run `npm install` casually**; use `npm ci` to install exactly
+>   what `package-lock.json` specifies.
+>
+> Why: iOS Xcode builds resolve native dependencies from the already-installed
+> `mobile/ios/Pods/` directory, which is a snapshot of versions chosen the
+> last time `pod install` ran. Running `pod install` again would re-resolve
+> against current `node_modules/`. If npm has installed any newer versions
+> since iOS was last verified (loose `^` semver ranges allow this), the
+> iOS Pod graph could diverge and silently break the iOS build.
+>
+> Lift these constraints once Android parity is complete and you intentionally
+> verify both platforms still build.
+
+### 10.1. Prerequisites
+
+- **JDK 17** (Temurin or Zulu). `java -version` should report 17.x.
+- **Android Studio** (Hedgehog or newer) with the SDK installed, or just
+  the command-line **Android SDK** + `cmdline-tools`.
+- An `ANDROID_HOME` env var pointing at the SDK root (typically
+  `~/Library/Android/sdk` on macOS, `~/Android/Sdk` on Linux).
+- Android SDK platforms **34** + build-tools **34.0.0** + NDK **25.1.8937393**
+  (the values in `mobile/android/build.gradle`'s `ext` block). Easiest path:
+  open the project once in Android Studio and accept the prompt to install
+  matching versions.
+
+### 10.2. Mapbox downloads token
+
+The Android Mapbox SDK is fetched from a private Maven repo. You need a
+secret token (scope `DOWNLOADS:READ`) — the same kind used in `~/.netrc`
+for iOS, separate from the `pk.*` runtime token in `.env`.
+
+Preferred: put it in `~/.gradle/gradle.properties` so it never enters the
+repo:
+
+```properties
+MAPBOX_DOWNLOADS_TOKEN=sk.your-secret-download-token
+```
+
+Alternatively, edit `mobile/android/gradle.properties` and set the value
+there (do NOT commit a real token).
+
+`mobile/.env` must also contain a public runtime token:
+
+```env
+MAPBOX_ACCESS_TOKEN=pk.your-public-runtime-token
+```
+
+### 10.3. Run on a device or emulator (debug)
+
+```bash
+# In one terminal: Metro
+cd mobile && npm start
+
+# In another terminal: build + install + launch
+cd mobile && npm run android
+```
+
+The first build downloads the Android Mapbox SDK and Gradle dependencies
+(~10 minutes, ~500MB). Subsequent builds are incremental.
+
+### 10.4. Permissions on first launch
+
+The app will prompt for:
+
+- **Location (While using the app)** — required for the map and walk
+  detection. Mirrors iOS *When In Use*.
+- **Notifications** (Android 13+) — required for Gus reminders.
+
+There is no Motion permission on Android; the accelerometer needs none.
+
+> **Background location is not yet supported on Android.** The iOS app uses
+> `UIBackgroundModes: location` to keep GPS alive with the screen off; the
+> Android equivalent is a foreground service with `type="location"` plus
+> `ACCESS_BACKGROUND_LOCATION`, which is not yet wired up. Keep ParkWalk in
+> the foreground during a walk.
+
+### 10.5. Release APK for reviewers
+
+`npm run android:apk` produces a signed APK that includes the JS bundle, so
+a reviewer can install it and walk on cellular without Metro:
+
+```bash
+cd mobile && npm run android:apk
+# output: mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+By default the release APK is signed with the **debug keystore**. That is
+fine for sideloading to a known reviewer's phone — they enable "Install
+unknown apps" once and tap the APK. It is **not** suitable for Play Store
+or for reusing the same key across distributions.
+
+To use a real release keystore (recommended for Firebase App Distribution
+or any wider rollout):
+
+```bash
+# Generate a keystore (one time, keep the file safe)
+cd mobile/android/app
+keytool -genkeypair -v -storetype PKCS12 \
+  -keystore parkwalk-release.keystore \
+  -alias parkwalk \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Then put the credentials in `~/.gradle/gradle.properties` (NOT in the repo):
+
+```properties
+PARKWALK_RELEASE_STORE_FILE=parkwalk-release.keystore
+PARKWALK_RELEASE_STORE_PASSWORD=...
+PARKWALK_RELEASE_KEY_ALIAS=parkwalk
+PARKWALK_RELEASE_KEY_PASSWORD=...
+```
+
+`mobile/android/app/build.gradle` automatically uses these if present and
+falls back to the debug keystore otherwise.
+
+### 10.6. Distribute to a reviewer
+
+Three options, in order of polish:
+
+1. **Direct APK share.** Upload `app-release.apk` to Drive/Dropbox, send
+   the link. Reviewer downloads, taps, allows "Install unknown apps" for
+   their browser/file manager once. Done. No accounts needed on either side.
+2. **Firebase App Distribution.** Free. Create a Firebase project, install
+   `firebase` CLI, run `firebase appdistribution:distribute app-release.apk
+   --app <appId> --testers reviewer@example.com`. They get an email link,
+   tap to install, and get OTA updates for future builds. Closest thing to
+   TestFlight on Android.
+3. **Google Play Internal Testing.** Requires a one-time $25 Play Console
+   fee. Use `npm run android:bundle` to produce an `.aab` instead and
+   upload it to the Internal Testing track. Reviewer installs via the Play
+   Store; clean experience but heaviest setup.
+
+### 10.7. Android troubleshooting
+
+- **`Could not resolve com.mapbox.maps:android:...`** — the Mapbox maven
+  repo lookup failed. Verify `MAPBOX_DOWNLOADS_TOKEN` is set (either
+  `~/.gradle/gradle.properties` or `mobile/android/gradle.properties`) and
+  that the token has `DOWNLOADS:READ` scope.
+- **`No such property: envConfigFiles`** or empty `Config.X` at runtime —
+  `react-native-config`'s `dotenv.gradle` did not apply. Confirm
+  `mobile/.env` exists and that you ran `npm install` from the repo root.
+- **`Could not get unknown property 'react-native-config'`** during gradle
+  sync — settings.gradle did not autolink. Re-run `npm install` from the
+  repo root and try `cd mobile/android && ./gradlew --stop && ./gradlew
+  clean`.
+- **App installs but the map is blank** — `MAPBOX_ACCESS_TOKEN` is empty
+  or invalid in `.env`. Rebuild after fixing (`.env` is read at build time
+  on Android, not at runtime).
+- **App can't reach backend** — Settings should show an `https://` Railway
+  URL. The release manifest does not enable cleartext HTTP.

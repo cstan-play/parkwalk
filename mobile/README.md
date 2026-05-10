@@ -1,8 +1,8 @@
 # @parkwalk/mobile
 
-React Native 0.73 iOS app (Phase 1). See `SETUP.md` for the full
-first-time setup including generating the native iOS project, signing with
-a free Apple ID, and configuring Mapbox.
+React Native 0.73 app for iOS and Android. See `SETUP.md` for the full
+first-time setup including the native iOS project, Android signing/Mapbox,
+and the shared `.env`.
 
 ## Directory layout
 
@@ -18,7 +18,9 @@ mobile/
     services/                apiClient (axios+refresh), authApi, entitiesApi, statsApi, secureStorage
     stores/                  authStore, settingsStore (zustand)
   ios-setup/                 templates for ios/Podfile and ios/ParkWalk/Info.plist
-  SETUP.md                   first-time setup
+  ios/                       generated iOS Xcode project (after SETUP.md step 1)
+  android/                   Android Gradle project (committed — Mapbox + signing wired)
+  SETUP.md                   first-time setup (iOS + Android)
 ```
 
 ## Daily dev loop
@@ -30,17 +32,26 @@ curl https://parkwalk-production.up.railway.app/health
 # 2. Start Metro
 cd mobile && npm start
 
-# 3. Build and run on iPhone from Xcode (Cmd-R)
+# 3a. iOS: build and run on iPhone from Xcode (Cmd-R)
+# 3b. Android: in another terminal
+cd mobile && npm run android   # debug build to attached device/emulator
 ```
 
 ## Outdoor cellular test loop
 
-Use the Xcode scheme **ParkWalkRelease** when you need a Metro-free build for
-field testing. Release builds package the React Native JS bundle into the app,
-so the phone can run on cellular without your Mac or local Wi-Fi.
+iOS — use the Xcode scheme **ParkWalkRelease** for a Metro-free build that
+packages the JS bundle into the app, so the phone can run on cellular without
+your Mac or local Wi-Fi.
 
-Set `FIELD_DEBUG_OVERLAY=true` in `mobile/.env` before building if you want the
-field telemetry overlay in the Release build.
+Android — build a release APK that bundles the JS:
+
+```bash
+cd mobile && npm run android:apk
+# output: mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+Set `FIELD_DEBUG_OVERLAY=true` in `mobile/.env` before either build if you
+want the field telemetry overlay in the Release build.
 
 ## Current architecture notes
 
@@ -58,14 +69,22 @@ field telemetry overlay in the Release build.
 - The map has no debug overlay right now. Verify field-test behavior with
   collect alerts, Railway logs, and database rows.
 
-## Phase 1 deliberate limits
+## Current platform parity
 
-- iOS only (no Android).
-- No push notifications, no HealthKit (free-provisioning blockers).
-- Activity recognition from iOS CMMotionActivity is not wired up in Phase 1;
-  `MovementSample.activity` is reported as UNKNOWN and the server still
-  correctly rejects bad samples via speed + accelerometer + teleport checks.
-  Native `CMPedometer` plus optional HealthKit is the next Alpha P0 motion
-  milestone.
+iOS and Android share the React Native code in `src/`. Platform-specific gaps:
+
+- **Native pedometer is iOS-only.** `src/native/Pedometer.ts` no-ops on
+  Android (`Platform.OS !== 'ios'`). The walking classifier still works on
+  Android via accelerometer-based step detection plus GPS speed; only the
+  high-fidelity `CMPedometer` step counts and pace are unavailable. Adding a
+  native step-counter (`Sensor.TYPE_STEP_COUNTER` or Health Connect) is the
+  follow-up.
+- **Background location.** iOS uses `UIBackgroundModes: location` to keep
+  GPS alive with the screen off. Android requires a foreground service with
+  `type="location"` plus `ACCESS_BACKGROUND_LOCATION`; that service is not
+  yet wired up. On Android the app must stay in the foreground during a walk.
+- **Activity recognition (`CMMotionActivity`)** is still stubbed on both
+  platforms. `MovementSample.activity = 'UNKNOWN'`; the server enforces
+  speed + accelerometer + teleport checks regardless.
 - No app-level error boundary UI yet — Metro and Sentry cover dev; Phase 2
   adds a production error boundary.

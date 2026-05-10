@@ -50,9 +50,23 @@ mobile/ios/*.xcodeproj/xcuserdata/
 mobile/ios/*.xcodeproj/project.xcworkspace/xcuserdata/
 mobile/ios/.xcode.env.local
 
-# React Native — Android (deferred to Phase 2; keep generated files
-# on disk for a future switch, but do not track them in git)
-mobile/android/
+# React Native — Android
+mobile/android/build/
+mobile/android/.gradle/
+mobile/android/.idea/
+mobile/android/.kotlin/
+mobile/android/local.properties
+mobile/android/captures/
+mobile/android/app/build/
+mobile/android/app/.cxx/
+mobile/android/app/release/
+mobile/android/*.iml
+mobile/android/app/*.iml
+mobile/android/*.hprof
+# Keep debug.keystore (committed for dev sideloads), but never commit a real
+# release keystore. Pattern allows debug.keystore through.
+mobile/android/app/*.keystore
+!mobile/android/app/debug.keystore
 
 mobile/.expo/
 mobile/.metro-cache/
