@@ -1,10 +1,12 @@
 # Mapbox Integration & Custom Map Styling
 
-> Status note, 2026-05-06: the current iOS app uses Mapbox Streets through
-> `@rnmapbox/maps`. Custom style work and custom collectible graphics are Alpha
-> product polish. Offline tile packs are de-prioritized unless field tests show
-> cellular map loading is unreliable or a custom map/art direction specifically
-> needs local tile packaging.
+> Status note, 2026-05-10: the mobile app uses `@rnmapbox/maps` with Mapbox
+> native SDK 11.21.1 on iOS and Android. The runtime map style is centralized in
+> `mobile/src/config/mapStyle.ts`: it defaults to Mapbox Standard and can be
+> overridden with `MAPBOX_STYLE_URL`, such as the Mapbox Studio Warm template.
+> Offline tile packs remain de-prioritized unless field tests show cellular map
+> loading is unreliable or a future art direction specifically needs local tile
+> packaging.
 
 ## Overview
 
@@ -14,15 +16,18 @@ implementing them across mobile and web.
 
 ## Current Mobile Map Behavior
 
-The Phase 1 iOS map lives in `mobile/src/screens/MapScreen.tsx` and uses
-`@rnmapbox/maps` with Mapbox Streets.
+The Phase 1 mobile map lives in `mobile/src/screens/MapScreen.tsx` and uses
+`@rnmapbox/maps` with a shared style URL. The default is
+`mapbox://styles/mapbox/standard`; local builds can use a Mapbox Studio style,
+such as Warm, by setting `MAPBOX_STYLE_URL` in `mobile/.env`.
 
 - `MapboxGL.UserLocation` renders the user's current location.
 - `MapboxGL.Camera` starts in follow-user mode at zoom 16.
 - Nearby collectibles render as `PointAnnotation` markers.
 - Tapping a marker runs the uncertainty-aware local distance check before
   sending the collect request.
-- The map has no field-debug overlay.
+- The production-like map has no field-debug overlay unless
+  `FIELD_DEBUG_OVERLAY=true` is baked into the build.
 
 ### Recenter control
 
@@ -100,8 +105,10 @@ than Mapbox-hosted styles.
 
 **Option A: Start from Template**
 
-Mapbox Studio → Styles → New Style → Choose template:
+Mapbox Studio → Styles → New Style → Choose template, or add a Mapbox template
+such as **Warm** to your Studio account:
 
+- **Warm**: softer Mapbox Standard-based style used by current ParkWalk builds
 - **Monochrome**: Clean, minimal look
 - **Outdoors**: Nature-focused for walking
 - **Navigation**: Clear paths and roads
@@ -280,21 +287,13 @@ Mapbox Studio → Styles → New Style → Choose template:
 ```typescript
 import MapboxGL from '@rnmapbox/maps';
 
-// Option 1: Use Mapbox Studio style URL
-const MAPBOX_STYLE_URL = 'mapbox://styles/your-username/your-style-id';
-
-// Option 2: Inline JSON style (for small tweaks)
-const CUSTOM_STYLE_JSON = {
-  version: 8,
-  // ... style definition
-};
+import { PARKWALK_MAP_STYLE_URL } from '@/config/mapStyle';
 
 const GameMap: React.FC = () => {
   return (
     <MapboxGL.MapView
       style={{ flex: 1 }}
-      styleURL={MAPBOX_STYLE_URL}
-      // or styleJSON={CUSTOM_STYLE_JSON}
+      styleURL={PARKWALK_MAP_STYLE_URL}
     >
       <MapboxGL.Camera
         followUserLocation
@@ -305,6 +304,21 @@ const GameMap: React.FC = () => {
   );
 };
 ```
+
+`PARKWALK_MAP_STYLE_URL` defaults to Mapbox Standard:
+
+```typescript
+export const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
+```
+
+To use a Mapbox Studio style, publish the style in Studio, copy its Style URL,
+and set:
+
+```env
+MAPBOX_STYLE_URL=mapbox://styles/your-username/your-style-id
+```
+
+Changing `.env` requires a full native rebuild. Metro reload is not enough.
 
 ### Custom Entity Markers
 

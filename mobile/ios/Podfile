@@ -7,7 +7,7 @@ require Pod::Executable.execute_command('node', ['-p',
 # react-native-permissions: hoisted to repo-root node_modules via npm workspaces.
 require_relative '../../node_modules/react-native-permissions/scripts/setup'
 
-platform :ios, min_ios_version_supported
+platform :ios, '15.0'
 prepare_react_native_project!
 
 # Register the iOS permission handlers we actually use. Each name maps to a
@@ -29,6 +29,7 @@ end
 # Required by @rnmapbox/maps: select the mapbox implementation.
 # Must be set BEFORE use_native_modules! so the rnmapbox-maps podspec picks it up.
 $RNMapboxMapsImpl = 'mapbox'
+$RNMapboxMapsVersion = '= 11.21.1'
 
 target 'ParkWalk' do
   config = use_native_modules!
@@ -55,7 +56,7 @@ target 'ParkWalk' do
 
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       end
     end
   end

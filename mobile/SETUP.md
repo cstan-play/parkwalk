@@ -94,6 +94,7 @@ cp .env.example .env
 # Edit:
 #   API_BASE_URL=              # optional hosted HTTPS staging override
 #   MAPBOX_ACCESS_TOKEN=pk.your-public-runtime-token
+#   MAPBOX_STYLE_URL=          # optional Mapbox Studio style URL, e.g. Warm
 ```
 
 `react-native-config` reads this file at build time. Changing it requires a
@@ -228,7 +229,7 @@ Quick cheat-sheet:
 | `react-native init` nukes committed files                               | `git checkout HEAD -- mobile/`                                                                                                       |
 | Pod install: `cannot load '@rnmapbox/maps/scripts/install'`             | Podfile must call `$RNMapboxMaps.pre/post_install(installer)` inside hook blocks; don't set `$RNMapboxMapsDownloadToken = ''`        |
 | Build: `with-environment.sh: No such file or directory`                 | `project.pbxproj` "Bundle React Native code and images" script: `../node_modules/` → `../../node_modules/` (monorepo hoists to root) |
-| `built for newer iOS-simulator (14.0) than linked (13.4)` warnings      | Main target's `IPHONEOS_DEPLOYMENT_TARGET` → `14.0` (to match Podfile)                                                               |
+| `built for newer iOS-simulator ... than linked ...` warnings            | Main target's `IPHONEOS_DEPLOYMENT_TARGET` → `15.0` (to match Podfile and Mapbox Maps v11)                                           |
 | Metro: `Cannot find module 'babel-plugin-module-resolver'`              | `npm i --workspace=mobile -D babel-plugin-module-resolver`                                                                           |
 | Metro: `Unable to resolve ./foo.js from shared/src/...`                 | Add `resolveRequest` `.js`→`.ts` fallback to `mobile/metro.config.js`                                                                |
 | App crashes at JS start: `[Permissions] No permission handler detected` | Podfile must call `setup_permissions(['LocationWhenInUse', 'LocationAlways', 'Motion'])`                                             |
@@ -243,26 +244,6 @@ workspaces hoist all deps to the repo root.
 The committed `mobile/android/` project builds against the same `mobile/.env`
 and the same hosted backend. You do not need a Mac to build for Android.
 
-> ### iOS protection invariant
->
-> The current Android work is incremental and should not affect iOS builds.
-> To keep that guarantee, while Android parity is being completed:
->
-> - **Do not run `pod install`.**
-> - **Do not delete `mobile/ios/Pods/` or `mobile/ios/Podfile.lock`.**
-> - **Do not run `npm install` casually**; use `npm ci` to install exactly
->   what `package-lock.json` specifies.
->
-> Why: iOS Xcode builds resolve native dependencies from the already-installed
-> `mobile/ios/Pods/` directory, which is a snapshot of versions chosen the
-> last time `pod install` ran. Running `pod install` again would re-resolve
-> against current `node_modules/`. If npm has installed any newer versions
-> since iOS was last verified (loose `^` semver ranges allow this), the
-> iOS Pod graph could diverge and silently break the iOS build.
->
-> Lift these constraints once Android parity is complete and you intentionally
-> verify both platforms still build.
-
 ### 10.1. Prerequisites
 
 - **JDK 17** (Temurin or Zulu). `java -version` should report 17.x.
@@ -274,6 +255,20 @@ and the same hosted backend. You do not need a Mac to build for Android.
   (the values in `mobile/android/build.gradle`'s `ext` block). Easiest path:
   open the project once in Android Studio and accept the prompt to install
   matching versions.
+
+If Gradle cannot find Java on macOS but Homebrew OpenJDK is installed, run
+Gradle with:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+```
+
+If Gradle cannot find the Android SDK, create `mobile/android/local.properties`
+with your SDK path. This file is ignored by git:
+
+```properties
+sdk.dir=/opt/homebrew/share/android-commandlinetools
+```
 
 ### 10.2. Mapbox downloads token
 
@@ -295,6 +290,7 @@ there (do NOT commit a real token).
 
 ```env
 MAPBOX_ACCESS_TOKEN=pk.your-public-runtime-token
+MAPBOX_STYLE_URL=mapbox://styles/your-username/your-style-id
 ```
 
 ### 10.3. Run on a device or emulator (debug)

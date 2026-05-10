@@ -1,6 +1,6 @@
 # Current Project Status
 
-Last reviewed: 2026-05-01.
+Last reviewed: 2026-05-10.
 
 ## Where The Project Is
 
@@ -31,13 +31,14 @@ The current goal is not feature expansion. The goal is to prove the core loop:
 - **Movement validation**: GPS speed is primary; raw JS accelerometer steps and
   activity are corroborating. The server uses hard rejects plus persisted soft
   flags.
-- **Mobile**: React Native iOS app with onboarding, auth screens, Mapbox map,
-  user-location recenter control, Start/Pause/Resume/End walk controls, live
-  route tracing, marker tap collect flow gated by an active walk, walk history
-  and walk detail screens, Stats, Settings, Keychain token storage, silent
-  refresh, hosted HTTPS API settings, and no product debug overlay on the map.
-  A build-time `FIELD_DEBUG_OVERLAY` flag can show collapsible field telemetry
-  in Metro-free Release builds without covering recovery controls.
+- **Mobile**: React Native iOS/Android app with onboarding, auth screens,
+  Mapbox map using a shared Standard/Warm-capable style URL, user-location
+  recenter control, Start/Pause/Resume/End walk controls, live route tracing,
+  marker tap collect flow gated by an active walk, walk history and walk detail
+  screens, Stats, Settings, Keychain token storage, silent refresh, hosted
+  HTTPS API settings, and no product debug overlay on the map. A build-time
+  `FIELD_DEBUG_OVERLAY` flag can show collapsible field telemetry in
+  Metro-free Release builds without covering recovery controls.
 - **Gus personality chat**: personality bible, shared prompt/category
   registry, backend `/api/v1/gus` profile/prefs/messages/chat endpoints,
   dog-profile setup, notification permission prompt, and a server-backed mobile

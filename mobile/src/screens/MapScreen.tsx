@@ -9,6 +9,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Config from 'react-native-config';
 
 import { CompanionLayer } from '@/components/CompanionLayer';
+import { PARKWALK_MAP_STYLE_URL } from '@/config/mapStyle';
 import { useCompanion } from '@/hooks/useCompanion';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { useMovementDetection } from '@/hooks/useMovementDetection';
@@ -310,6 +311,7 @@ export function MapScreen(): JSX.Element {
     <View style={styles.container}>
       <MapboxGL.MapView
         style={styles.map}
+        styleURL={PARKWALK_MAP_STYLE_URL}
         onDidFinishLoadingMap={() => undefined}
         onCameraChanged={handleCameraChanged}
         logoEnabled={false}

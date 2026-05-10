@@ -6,6 +6,7 @@ import type { Position } from 'geojson';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PARKWALK_MAP_STYLE_URL } from '@/config/mapStyle';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { fetchWalk } from '@/services/walksApi';
 import { useWalkSessionStore, type LocalWalkSession } from '@/stores/walkSessionStore';
@@ -85,6 +86,7 @@ export function WalkDetailScreen(): JSX.Element {
       <View style={styles.mapBox}>
         <MapboxGL.MapView
           style={styles.map}
+          styleURL={PARKWALK_MAP_STYLE_URL}
           logoEnabled={false}
           attributionEnabled={false}
           onDidFinishLoadingMap={() => setMapLoaded(true)}

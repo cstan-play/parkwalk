@@ -1,6 +1,7 @@
 jest.mock('react-native-config', () => ({
   API_BASE_URL: '',
   MAPBOX_ACCESS_TOKEN: 'pk.test',
+  MAPBOX_STYLE_URL: '',
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>

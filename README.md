@@ -46,6 +46,7 @@ npm install
 cd mobile
 cp .env.example .env
 # edit mobile/.env — set MAPBOX_ACCESS_TOKEN=pk.your-public-token
+# optional: set MAPBOX_STYLE_URL=mapbox://styles/<username>/<style-id>
 # optional: set API_BASE_URL=https://<railway-staging-url> for hosted staging
 npm install
 cd ios && pod install && cd ..

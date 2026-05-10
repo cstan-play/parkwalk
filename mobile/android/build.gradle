@@ -6,6 +6,7 @@ buildscript {
         targetSdkVersion = 34
         ndkVersion = "25.1.8937393"
         kotlinVersion = "1.8.0"
+        RNMapboxMapsVersion = "11.21.1"
     }
     repositories {
         google()
@@ -30,6 +31,7 @@ ext {
     targetSdkVersion = 34
     ndkVersion = "25.1.8937393"
     kotlinVersion = "1.8.0"
+    RNMapboxMapsVersion = "11.21.1"
     // Tells react-native-gesture-handler where the hoisted react-native
     // package lives. The property name is misleading — the value is the
     // react-native package directory itself, not the node_modules parent.

@@ -37,7 +37,7 @@ PhaseScriptExecution failed" or a crash at first JS execution.
 | 1   | `react-native init` deleted committed files in `mobile/`                                                  | The CLI overwrites TS files silently when run in a non-empty directory                                                                                                               | `git checkout HEAD -- mobile/`; kept the generated native-only files                                                                              |
 | 2   | `pod install` failed: `cannot load '@rnmapbox/maps/scripts/install'`                                      | In `rnmapbox-maps@10.1.30` that script no longer exists; `$RNMapboxMaps` is defined by the podspec itself. Also `$RNMapboxMapsDownloadToken = ''` (truthy) broke `~/.netrc` auth     | Podfile calls `$RNMapboxMaps.pre_install(installer)` and `.post_install(installer)` inside the hook blocks; removed the bogus download-token line |
 | 3   | Build failed: `../node_modules/react-native/scripts/xcode/with-environment.sh: No such file or directory` | RN-CLI's "Bundle React Native code and images" script uses `../node_modules/`, which is `mobile/node_modules/` — missing because npm workspaces hoisted to repo root                 | Changed the script phase in `project.pbxproj` to `../../node_modules/`                                                                            |
-| 4   | Linker spam about "built for newer iOS-simulator (14.0) than linked (13.4)"                               | Main target's `IPHONEOS_DEPLOYMENT_TARGET` was 13.4 (RN 0.73 default) but the Podfile forced all pods to 14.0 for Mapbox + rnmapbox                                                  | Set main-target deployment target to 14.0 (4 occurrences in `project.pbxproj`)                                                                    |
+| 4   | Linker spam about "built for newer iOS-simulator (...) than linked (...)"                                 | Main target's `IPHONEOS_DEPLOYMENT_TARGET` was below the Mapbox native SDK requirement                                                                                              | Set main-target deployment target to 15.0 (4 occurrences in `project.pbxproj`)                                                                    |
 | 5   | Metro crashed: `Cannot find module 'babel-plugin-module-resolver'`                                        | `mobile/babel.config.js` uses the plugin to resolve `@/*` path aliases but it was never declared in `mobile/package.json`                                                            | `npm install --workspace=mobile --save-dev babel-plugin-module-resolver`                                                                          |
 | 6   | Metro crashed: `Unable to resolve ./schemas/index.js from shared/src/index.ts`                            | The `@parkwalk/shared` workspace uses TypeScript NodeNext ESM convention (explicit `.js` extensions on imports of `.ts` files); Metro's default resolver doesn't strip `.js` → `.ts` | Added a custom `resolveRequest` fallback in `mobile/metro.config.js`                                                                              |
 | 7   | App launched then crashed at JS startup: `[Permissions] No permission handler detected`                   | `react-native-permissions@4.1.5` ships no handlers by default; the Podfile must call `setup_permissions(['LocationWhenInUse', 'LocationAlways', 'Motion'])`                          | Added the call in the Podfile (after `require_relative '.../scripts/setup'`)                                                                      |
@@ -242,10 +242,11 @@ Phase 1 and tracked here so we don't lose them:
    on walking paths. Continue tuning snap radius, spacing, and accepted Mapbox
    path types as more test routes are walked. Tracked in
    `docs/08-GAME-ENTITIES.md`.
-2. **Offline map tiles — de-prioritized**. MapScreen uses Mapbox Streets with
-   no `OfflineManager`. Keep using online Mapbox styles for now; revisit tile
-   packs only if field tests show cellular map loading is a real blocker or a
-   future art direction requires locally packaged custom tiles.
+2. **Offline map tiles — de-prioritized**. MapScreen uses online Mapbox-hosted
+   styles through `MAPBOX_STYLE_URL`, defaulting to Mapbox Standard. Keep using
+   online Mapbox styles for now; revisit tile packs only if field tests show
+   cellular map loading is a real blocker or a future art direction requires
+   locally packaged custom tiles.
 3. **Auth session refresh — done for Phase 1.** The API client now retries
    a single 401 via `/api/v1/auth/refresh`, rotates stored Keychain tokens,
    and clears local auth state if refresh fails.
@@ -255,7 +256,7 @@ Phase 1 and tracked here so we don't lose them:
 5. **Hosted API only — done for Phase 1.** The mobile app no longer supports
    LAN/ngrok/local HTTP API targets. `API_BASE_URL` is optional and must be a
    hosted HTTPS API URL; otherwise the compiled Railway origin is used.
-6. **iOS 14 deployment target**. Set to match rnmapbox-maps. Revisit
+6. **iOS 15 deployment target**. Set to match Mapbox Maps v11. Revisit
    when we widen device support (unlikely before public beta).
 7. **Native CMPedometer wrapper** — **promoted to Alpha P0 milestone
    above**. Left as a line item here so the numbering in older commit
