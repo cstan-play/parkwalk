@@ -1,0 +1,57 @@
+buildscript {
+    ext {
+        buildToolsVersion = "34.0.0"
+        minSdkVersion = 21
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        ndkVersion = "25.1.8937393"
+        kotlinVersion = "1.8.0"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+// Mirror SDK versions to rootProject.ext so older third-party libraries
+// (react-native-gesture-handler 2.16, etc.) can resolve them via
+// rootProject.ext.<prop> instead of buildscript.ext.<prop>.
+ext {
+    buildToolsVersion = "34.0.0"
+    minSdkVersion = 21
+    compileSdkVersion = 34
+    targetSdkVersion = 34
+    ndkVersion = "25.1.8937393"
+    kotlinVersion = "1.8.0"
+    // Tells react-native-gesture-handler where the hoisted react-native
+    // package lives. The property name is misleading — the value is the
+    // react-native package directory itself, not the node_modules parent.
+    REACT_NATIVE_NODE_MODULES_DIR = file("../../node_modules/react-native")
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // Mapbox Android SDK (used by @rnmapbox/maps). The downloads token
+        // (scope DOWNLOADS:READ) lives in android/gradle.properties.
+        maven {
+            url 'https://api.mapbox.com/downloads/v2/releases/maven'
+            authentication {
+                basic(BasicAuthentication)
+            }
+            credentials {
+                // username must literally be "mapbox" (not your account)
+                username = 'mapbox'
+                password = project.properties['MAPBOX_DOWNLOADS_TOKEN'] ?: ""
+            }
+        }
+    }
+}

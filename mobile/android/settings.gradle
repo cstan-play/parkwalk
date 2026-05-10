@@ -1,0 +1,6 @@
+rootProject.name = 'ParkWalk'
+// Monorepo: dependencies are hoisted to the repo root (../../node_modules
+// from mobile/android), not mobile/node_modules.
+apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
+include ':app'
+includeBuild('../../node_modules/@react-native/gradle-plugin')
