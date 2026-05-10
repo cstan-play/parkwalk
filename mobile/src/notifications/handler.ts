@@ -14,10 +14,14 @@ type NotifeeEvent = {
 type NotifeeApi = {
   EventType: { PRESS: number };
   onForegroundEvent: (handler: (event: NotifeeEvent) => void) => () => void;
+  onBackgroundEvent: (handler: (event: NotifeeEvent) => Promise<void>) => void;
   getInitialNotification?: () => Promise<{ notification?: { data?: Record<string, unknown> } } | null>;
 };
 
-type NotifeeNativeApi = Pick<NotifeeApi, 'onForegroundEvent' | 'getInitialNotification'>;
+type NotifeeNativeApi = Pick<
+  NotifeeApi,
+  'onForegroundEvent' | 'onBackgroundEvent' | 'getInitialNotification'
+>;
 
 type NotifeeModule = {
   default?: NotifeeNativeApi;
@@ -31,12 +35,13 @@ function tryLoadNotifee(): NotifeeApi | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
     const mod = require('@notifee/react-native') as NotifeeModule;
     const nativeApi = mod.default ?? mod;
-    if (!nativeApi.onForegroundEvent || !mod.EventType) {
+    if (!nativeApi.onForegroundEvent || !nativeApi.onBackgroundEvent || !mod.EventType) {
       notifeeCache = null;
       return notifeeCache;
     }
     notifeeCache = {
       onForegroundEvent: nativeApi.onForegroundEvent.bind(nativeApi),
+      onBackgroundEvent: nativeApi.onBackgroundEvent.bind(nativeApi),
       getInitialNotification: nativeApi.getInitialNotification?.bind(nativeApi),
       EventType: mod.EventType,
     };
@@ -44,6 +49,39 @@ function tryLoadNotifee(): NotifeeApi | null {
     notifeeCache = null;
   }
   return notifeeCache;
+}
+
+/**
+ * Notifee Android requires a background event handler to be registered at
+ * the top of `index.js`, before AppRegistry.registerComponent. Without it,
+ * Android cannot deliver press events when the app is backgrounded or
+ * killed — the notification just opens the app without any context.
+ *
+ * On iOS the press path is `getInitialNotification` (cold launch from a
+ * tap) plus `onForegroundEvent` (app already running). The background
+ * handler is harmless on iOS — Notifee will simply not invoke it.
+ *
+ * The handler stashes the category in AsyncStorage; the existing
+ * `consumeInitialGusNotification()` picks it up after the app's
+ * NavigationContainer is ready.
+ */
+export function registerGusBackgroundNotificationHandler(): void {
+  const api = tryLoadNotifee();
+  if (!api) return;
+
+  try {
+    api.onBackgroundEvent(async ({ type, detail }) => {
+      if (type !== api.EventType.PRESS) return;
+      const category = parseCategory(detail.notification?.data?.category);
+      if (category) {
+        await AsyncStorage.setItem(PENDING_CATEGORY_KEY, category);
+      }
+    });
+  } catch {
+    // Notifee may throw if onBackgroundEvent is registered more than once;
+    // we accept the no-op since the first registration is the one that
+    // matters and re-registration during HMR is benign.
+  }
 }
 
 export function registerGusForegroundNotificationHandler(): () => void {
