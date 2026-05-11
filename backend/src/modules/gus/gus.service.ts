@@ -18,7 +18,11 @@ import { env } from '../../env.js';
 import { conflict, notFound, validationError } from '../../errors.js';
 import { prisma } from '../../prisma.js';
 
-import { assembleContextForPrompt } from './context.service.js';
+import {
+  assembleContextForPrompt,
+  assembleWeatherDebug,
+  type WeatherDebugSnapshot,
+} from './context.service.js';
 import {
   configuredModelForCategory,
   generate,
@@ -129,6 +133,10 @@ export async function sendUserMessage(
   ownerName: string,
   content: string,
 ): Promise<SendChatResult> {
+  if (isOpenMeteoDebugCommand(content)) {
+    return handleOpenMeteoDebug(userId, content);
+  }
+
   const profile = await getOrCreateDogProfile(userId);
   const prefs = await getOrCreateGusPrefs(userId);
   const context = await assembleContextForPrompt({ userId, ownerName });
@@ -177,6 +185,72 @@ export async function sendUserMessage(
   });
 
   return result;
+}
+
+/**
+ * Operator escape hatch. When the user types exactly "OpenMeteo" (case
+ * insensitive) we bypass the LLM and reply with the raw upstream weather
+ * snapshot so you can see what data Gus is actually being told about the
+ * world — useful for sanity-checking the bake before trusting Gus's tone.
+ */
+function isOpenMeteoDebugCommand(content: string): boolean {
+  return content.trim().toLowerCase() === 'openmeteo';
+}
+
+async function handleOpenMeteoDebug(userId: string, content: string): Promise<SendChatResult> {
+  const snapshot = await assembleWeatherDebug({ userId });
+  const replyText = formatOpenMeteoDebugReply(snapshot);
+  return prisma.$transaction(async (tx) => {
+    const userRow = await tx.chatMessage.create({
+      data: { userId, role: 'user', kind: 'user_message', content },
+    });
+    const gusRow = await tx.chatMessage.create({
+      data: {
+        userId,
+        role: 'gus',
+        kind: 'gus_reply',
+        content: replyText,
+        modelUsed: 'debug:openmeteo',
+      },
+    });
+    return { userMessage: rowToMessage(userRow), gusReply: rowToMessage(gusRow) };
+  });
+}
+
+function formatOpenMeteoDebugReply(snapshot: WeatherDebugSnapshot): string {
+  const lines: string[] = ['OpenMeteo debug'];
+  if (!snapshot.coords) {
+    lines.push(
+      '',
+      'No coordinates resolved — you have no completed walks yet, so',
+      'weather stays null and the "Weather:" line is omitted from the',
+      'system prompt entirely.',
+    );
+    return lines.join('\n');
+  }
+  const sourceLabel = snapshot.coords.source === 'input' ? 'request input' : 'last completed walk';
+  lines.push(
+    '',
+    `Coords: ${snapshot.coords.lat.toFixed(4)}, ${snapshot.coords.lng.toFixed(4)} (${sourceLabel})`,
+  );
+  if (!snapshot.weather.raw) {
+    lines.push('', 'Upstream call failed or returned no current data.');
+    return lines.join('\n');
+  }
+  const r = snapshot.weather.raw;
+  lines.push(
+    '',
+    'Raw upstream (uncached):',
+    `- weather_code: ${r.weather_code ?? '—'}`,
+    `- temperature_2m: ${r.temperature_2m ?? '—'} °C`,
+    `- precipitation: ${r.precipitation ?? '—'} mm`,
+    `- wind_speed_10m: ${r.wind_speed_10m ?? '—'} m/s`,
+    '',
+    `Baked into system prompt: ${
+      snapshot.weather.description ? `"${snapshot.weather.description}"` : 'null (Weather line omitted)'
+    }`,
+  );
+  return lines.join('\n');
 }
 
 export async function submitQuickReply(

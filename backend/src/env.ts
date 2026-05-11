@@ -51,6 +51,11 @@ const coreEnvSchema = z.object({
   GUS_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   GUS_DAILY_TOKEN_LIMIT: z.coerce.number().int().min(0).default(200_000),
+
+  // Weather provider used to enrich Gus's "WHAT YOU KNOW RIGHT NOW" block.
+  // 'open-meteo' is the default (no API key); 'none' short-circuits to null
+  // for environments where outbound HTTP to api.open-meteo.com isn't allowed.
+  WEATHER_PROVIDER: z.enum(['open-meteo', 'none']).default('open-meteo'),
 });
 
 const envSchema = z.intersection(coreEnvSchema, walkablePlacementEnvSchema);
