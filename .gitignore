@@ -84,3 +84,6 @@ mobile/.metro-cache/
 # Docker
 infra/postgres-data/
 infra/redis-data/
+
+# Local Claude state
+.claude/
