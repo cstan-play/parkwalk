@@ -1,7 +1,7 @@
 import type { AuthUser, TokenPair } from '@parkwalk/shared';
 import { create } from 'zustand';
 
-import { clearTokens, loadTokens, saveTokens } from '@/services/secureStorage';
+import { clearTokens, loadTokens, loadUser, saveAuthSession } from '@/services/secureStorage';
 
 interface AuthState {
   user: AuthUser | null;
@@ -18,16 +18,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   tokens: null,
   isAuthenticated: false,
   hydrate: async () => {
-    const stored = await loadTokens();
-    if (stored) {
+    const [stored, user] = await Promise.all([loadTokens(), loadUser()]);
+    if (stored && user) {
       set({
+        user,
         tokens: stored,
         isAuthenticated: true,
       });
+      return;
     }
+    if (stored && !user) {
+      await clearTokens();
+    }
+    set({ user: null, tokens: null, isAuthenticated: false });
   },
   setAuthenticated: async (user, tokens) => {
-    await saveTokens(tokens);
+    await saveAuthSession(tokens, user);
     set({ user, tokens, isAuthenticated: true });
   },
   setTokens: (tokens) => {

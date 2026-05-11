@@ -152,12 +152,21 @@ describe('walkSessionStore stabilization behavior', () => {
         completedSessions: [],
       }),
     );
+    await AsyncStorage.setItem(
+      'parkwalk.walk_sessions.v3.authenticated',
+      JSON.stringify({
+        ownerId: 'authenticated',
+        activeSession: activeSession({ clientId: 'shared-authenticated-walk' }),
+        completedSessions: [],
+      }),
+    );
 
     await useWalkSessionStore.getState().hydrate('user-b');
 
     expect(useWalkSessionStore.getState().activeSession).toBeNull();
     expect(useWalkSessionStore.getState().recoveryPromptPending).toBe(false);
     expect(await AsyncStorage.getItem('parkwalk.walk_sessions.v1')).toBeNull();
+    expect(await AsyncStorage.getItem('parkwalk.walk_sessions.v3.authenticated')).toBeNull();
 
     await useWalkSessionStore.getState().hydrate('user-a');
 

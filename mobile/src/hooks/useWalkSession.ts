@@ -12,8 +12,11 @@ const CHECK_INTERVAL_MS = 15_000;
 
 export function useWalkSession(movement: MovementDetectionResult): void {
   const lastRecordedSampleAtRef = useRef<string | null>(null);
-  const ownerId = useAuthStore((s) => s.user?.id ?? (s.isAuthenticated ? 'authenticated' : null));
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const ownerId = isAuthenticated ? userId : null;
   const hydrate = useWalkSessionStore((s) => s.hydrate);
+  const clearInMemory = useWalkSessionStore((s) => s.clearInMemory);
   const hydrated = useWalkSessionStore((s) => s.hydrated);
   const activeSession = useWalkSessionStore((s) => s.activeSession);
   const activeSessionClientId = activeSession?.clientId;
@@ -26,8 +29,12 @@ export function useWalkSession(movement: MovementDetectionResult): void {
   const syncPendingWalks = useWalkSessionStore((s) => s.syncPendingWalks);
 
   useEffect(() => {
+    if (isAuthenticated && !ownerId) {
+      clearInMemory();
+      return;
+    }
     void hydrate(ownerId);
-  }, [hydrate, ownerId]);
+  }, [clearInMemory, hydrate, isAuthenticated, ownerId]);
 
   useEffect(() => {
     if (!movement.latest || !activeSessionClientId || activeSessionStatus !== 'active') return;

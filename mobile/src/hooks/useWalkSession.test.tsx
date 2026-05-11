@@ -116,6 +116,71 @@ describe('useWalkSession', () => {
       renderer?.unmount();
     });
   });
+
+  it('does not hydrate the shared authenticated bucket while the user id is missing', async () => {
+    useAuthStore.setState({
+      user: null,
+      tokens: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        accessTokenExpiresAt: '2026-04-29T11:00:00.000Z',
+        refreshTokenExpiresAt: '2026-05-29T11:00:00.000Z',
+      },
+      isAuthenticated: true,
+    });
+    const hydrateSpy = jest.spyOn(useWalkSessionStore.getState(), 'hydrate');
+    const clearInMemorySpy = jest.spyOn(useWalkSessionStore.getState(), 'clearInMemory');
+
+    let renderer: ReturnType<typeof create> | null = null;
+    await act(async () => {
+      renderer = create(<TestHarness value={movement} />);
+      await flushPromises();
+    });
+
+    expect(clearInMemorySpy).toHaveBeenCalledTimes(1);
+    expect(hydrateSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+    hydrateSpy.mockRestore();
+    clearInMemorySpy.mockRestore();
+  });
+
+  it('hydrates walk storage with the concrete authenticated user id', async () => {
+    useAuthStore.setState({
+      user: {
+        id: '11111111-1111-4111-8111-111111111111',
+        username: 'tester',
+        email: 'tester@example.com',
+        displayName: null,
+        avatarUrl: null,
+        createdAt: '2026-04-29T10:00:00.000Z',
+      },
+      tokens: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        accessTokenExpiresAt: '2026-04-29T11:00:00.000Z',
+        refreshTokenExpiresAt: '2026-05-29T11:00:00.000Z',
+      },
+      isAuthenticated: true,
+    });
+    const hydrateSpy = jest.spyOn(useWalkSessionStore.getState(), 'hydrate');
+
+    let renderer: ReturnType<typeof create> | null = null;
+    await act(async () => {
+      renderer = create(<TestHarness value={movement} />);
+      await flushPromises();
+    });
+
+    expect(hydrateSpy).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+    expect(hydrateSpy).not.toHaveBeenCalledWith('authenticated');
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+    hydrateSpy.mockRestore();
+  });
 });
 
 function activeWalkSession(): LocalWalkSession {

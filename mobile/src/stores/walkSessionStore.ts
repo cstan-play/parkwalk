@@ -105,6 +105,7 @@ interface WalkSessionState extends PersistedState {
   hydrated: boolean;
   recoveryPromptPending: boolean;
   hydrate: (ownerId?: string | null) => Promise<void>;
+  clearInMemory: () => void;
   clearRecoveryPrompt: () => void;
   startWalk: (initialLocation?: Location | null) => Promise<void>;
   pauseWalk: () => Promise<void>;
@@ -133,6 +134,10 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
   hydrate: async (ownerId = null) => {
     const normalizedOwnerId = ownerId ?? null;
     if (get().hydrated && get().ownerId === normalizedOwnerId) return;
+    if (get().ownerId !== normalizedOwnerId) {
+      clearPendingPersist();
+      set(emptyInMemoryState(normalizedOwnerId, false));
+    }
     try {
       await removePreviousWalkStorage(normalizedOwnerId);
       const raw = await AsyncStorage.getItem(storageKeyForOwner(normalizedOwnerId));
@@ -160,6 +165,11 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       recoveryPromptPending: false,
       lastKnownLocation: undefined,
     });
+  },
+
+  clearInMemory: () => {
+    clearPendingPersist();
+    set(emptyInMemoryState(null, false));
   },
 
   clearRecoveryPrompt: () => set({ recoveryPromptPending: false }),
@@ -606,6 +616,13 @@ function schedulePersist(get: () => PersistedState): void {
   }, PERSIST_INTERVAL_MS - elapsed);
 }
 
+function clearPendingPersist(): void {
+  if (pendingPersist) {
+    clearTimeout(pendingPersist);
+    pendingPersist = null;
+  }
+}
+
 function storageKeyForOwner(ownerId: string | null): string {
   return ownerId ? `${STORAGE_KEY_PREFIX}.${ownerId}` : `${STORAGE_KEY_PREFIX}.anonymous`;
 }
@@ -615,9 +632,27 @@ async function removePreviousWalkStorage(ownerId: string | null): Promise<void> 
     LEGACY_STORAGE_KEY,
     `${PREVIOUS_STORAGE_KEY_PREFIX}.anonymous`,
     `${PREVIOUS_STORAGE_KEY_PREFIX}.authenticated`,
+    `${STORAGE_KEY_PREFIX}.authenticated`,
   ];
   if (ownerId) oldKeys.push(`${PREVIOUS_STORAGE_KEY_PREFIX}.${ownerId}`);
   await Promise.all(oldKeys.map((key) => AsyncStorage.removeItem(key)));
+}
+
+function emptyInMemoryState(
+  ownerId: string | null,
+  hydrated: boolean,
+): Pick<
+  WalkSessionState,
+  'ownerId' | 'activeSession' | 'completedSessions' | 'hydrated' | 'recoveryPromptPending' | 'lastKnownLocation'
+> {
+  return {
+    ownerId,
+    activeSession: null,
+    completedSessions: [],
+    hydrated,
+    recoveryPromptPending: false,
+    lastKnownLocation: undefined,
+  };
 }
 
 export function getClosedPauseIntervals(
@@ -698,10 +733,7 @@ function describeSyncError(err: unknown): string {
 }
 
 export function __resetWalkSessionStoreForTests(): void {
-  if (pendingPersist) {
-    clearTimeout(pendingPersist);
-    pendingPersist = null;
-  }
+  clearPendingPersist();
   lastPersistAt = 0;
   useWalkSessionStore.setState({
     ownerId: null,
