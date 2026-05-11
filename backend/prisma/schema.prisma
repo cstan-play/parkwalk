@@ -136,6 +136,7 @@ model WalkSession {
   pathPointCount        Int      @map("path_point_count")
   pathSegments           Json     @map("path_segments")
   pauseIntervals        Json?    @map("pause_intervals")
+  weatherSnapshot       String?  @map("weather_snapshot")
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { smellTypeSchema } from './entity.js';
 import { locationSchema, timestampSchema, uuidSchema } from './primitives.js';
 
 export const walkSessionStatusSchema = z.enum([
@@ -29,6 +30,18 @@ export const walkPauseIntervalSchema = z.object({
 });
 export type WalkPauseInterval = z.infer<typeof walkPauseIntervalSchema>;
 
+/**
+ * Per-walk smell rollup derived server-side from `user_collections` joined
+ * against the entity's config. `byType` is partial because older entities
+ * pre-date the smellType field; their collections show up in `totalCount`
+ * but not in any per-type bucket.
+ */
+export const walkSmellSummarySchema = z.object({
+  totalCount: z.number().int().min(0),
+  byType: z.record(smellTypeSchema, z.number().int().min(0)),
+});
+export type WalkSmellSummary = z.infer<typeof walkSmellSummarySchema>;
+
 export const walkSessionSchema = z.object({
   id: uuidSchema,
   clientId: uuidSchema,
@@ -46,6 +59,9 @@ export const walkSessionSchema = z.object({
   pathPointCount: z.number().int().min(0),
   pathSegments: z.array(walkPathSegmentSchema),
   pauseIntervals: z.array(walkPauseIntervalSchema),
+  /** Resolved by the backend at sync time when path has >=1 GPS point. */
+  weatherSnapshot: z.string().nullable(),
+  smells: walkSmellSummarySchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 });

@@ -10,12 +10,29 @@ export const entityTypeSchema = z.enum([
 ]);
 export type EntityType = z.infer<typeof entityTypeSchema>;
 
+export const smellTypeSchema = z.enum([
+  'other_dogs_pee',
+  'real_poop',
+  'picked_up_poop',
+  'humans',
+  'neighbours',
+  'pigeons',
+  'birds',
+]);
+export type SmellType = z.infer<typeof smellTypeSchema>;
+
 export const collectibleConfigSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   points: z.number().int().min(0).max(10000).default(10),
   iconKey: z.string().default('default_collectible'),
   respawnSeconds: z.number().int().min(0).optional(),
+  // Phase 5: new collectibles always carry a smellType. Older rows seeded
+  // before this phase do not — callers reading legacy entities should
+  // tolerate `undefined` here.
+  smellType: smellTypeSchema.optional(),
+  /** Short Gus-voice one-liner attached to this specific entity instance. */
+  gusFlavor: z.string().max(200).optional(),
 });
 export type CollectibleConfig = z.infer<typeof collectibleConfigSchema>;
 

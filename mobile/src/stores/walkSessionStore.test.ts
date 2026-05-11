@@ -68,6 +68,8 @@ describe('walkSessionStore stabilization behavior', () => {
       pathPointCount: 0,
       pathSegments: [],
       pauseIntervals: [],
+      weatherSnapshot: null,
+      smells: { totalCount: 0, byType: {} },
       createdAt: '2026-04-29T10:01:00.000Z',
       updatedAt: '2026-04-29T10:01:00.000Z',
     });

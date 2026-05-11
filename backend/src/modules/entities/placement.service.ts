@@ -1,3 +1,5 @@
+import type { SmellType } from '@parkwalk/shared';
+
 import { env } from '../../env.js';
 import { logger } from '../../logger.js';
 import { prisma } from '../../prisma.js';
@@ -89,6 +91,7 @@ export async function ensureNearbyCollectibles(params: {
 
     const index = params.visibleCount + inserted.length + 1;
     const isRare = index % 6 === 0;
+    const smellType = pickSmellType();
     const id = await insertCollectible(prisma, {
       lat: candidate.lat,
       lng: candidate.lng,
@@ -99,6 +102,7 @@ export async function ensureNearbyCollectibles(params: {
         description: 'Auto-seeded near a walk test location',
         points: isRare ? 50 : 10,
         iconKey: isRare ? 'gem' : 'coin',
+        smellType,
         placement: {
           source: 'nearby_auto_seed',
           version: placementVersion,
@@ -167,6 +171,31 @@ function currentWalkableConfig(): WalkablePlacementConfig {
     WALKABLE_SNAP_REQUIRED: env.WALKABLE_SNAP_REQUIRED,
     WALKABLE_TILEQUERY_MAX_CALLS: env.WALKABLE_TILEQUERY_MAX_CALLS,
   };
+}
+
+/**
+ * Weighted distribution per plan A.1: pigeons & birds common; real_poop &
+ * humans medium; the rest rare. Weights are integers that sum to 100 so the
+ * roll is just a single uniform integer in [0, 99].
+ */
+const SMELL_WEIGHTS: ReadonlyArray<readonly [SmellType, number]> = [
+  ['pigeons', 25],
+  ['birds', 20],
+  ['real_poop', 15],
+  ['humans', 12],
+  ['other_dogs_pee', 12],
+  ['picked_up_poop', 8],
+  ['neighbours', 8],
+];
+
+function pickSmellType(): SmellType {
+  const roll = Math.floor(Math.random() * 100);
+  let cursor = 0;
+  for (const [type, weight] of SMELL_WEIGHTS) {
+    cursor += weight;
+    if (roll < cursor) return type;
+  }
+  return 'pigeons';
 }
 
 function placementSnapMetadata(params: {
