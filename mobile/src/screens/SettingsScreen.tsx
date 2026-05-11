@@ -171,7 +171,7 @@ export function SettingsScreen(): JSX.Element {
       Alert.alert(
         result.scheduled ? 'Scheduled' : 'Not scheduled',
         result.scheduled
-          ? 'Test notification will fire in about 30 seconds.'
+          ? 'Test notification will fire in about 15 seconds.'
           : scheduleReasonText(result.reason),
       );
     } catch (err) {

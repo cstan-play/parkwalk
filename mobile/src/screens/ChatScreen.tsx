@@ -1,6 +1,6 @@
 import type { ChatMessage, GusQuickReply } from '@parkwalk/shared';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { useChatStore } from '@/stores/chatStore';
+import { useChatStore, type FiringCategory } from '@/stores/chatStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chat'>;
 
@@ -25,6 +25,7 @@ export function ChatScreen(_props: Props): JSX.Element {
   const loaded = useChatStore((s) => s.loaded);
   const sending = useChatStore((s) => s.sending);
   const replyingToMessageId = useChatStore((s) => s.replyingToMessageId);
+  const firingCategory = useChatStore((s) => s.firingCategory);
   const error = useChatStore((s) => s.error);
   const loadMessages = useChatStore((s) => s.loadMessages);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -35,11 +36,30 @@ export function ChatScreen(_props: Props): JSX.Element {
     void loadMessages();
   }, [loadMessages]);
 
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]!.id : null;
+
+  // FlatList virtualization on iOS measures lazily — a single scrollToEnd
+  // can fire before the latest item is measured, landing on the previous
+  // bottom. We schedule three attempts (immediate / 60ms / 240ms) so by the
+  // last one all layout work has settled. All animated:false to avoid
+  // racing animations.
+  const scrollToBottom = useCallback(() => {
+    const doScroll = () => listRef.current?.scrollToEnd({ animated: false });
+    requestAnimationFrame(doScroll);
+    const t1 = setTimeout(doScroll, 60);
+    const t2 = setTimeout(doScroll, 240);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   useEffect(() => {
-    if (messages.length > 0 || sending) {
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    if (messages.length > 0 || sending || firingCategory) {
+      return scrollToBottom();
     }
-  }, [messages.length, sending]);
+    return undefined;
+  }, [messages.length, sending, firingCategory, replyingToMessageId, lastMessageId, scrollToBottom]);
 
   const canSend = draft.trim().length > 0 && !sending;
 
@@ -52,7 +72,11 @@ export function ChatScreen(_props: Props): JSX.Element {
     await sendMessage(content);
   }
 
-  if (loading && !loaded) {
+  // Suppress the centered loading spinner if a notification fire is in
+  // flight — otherwise the spinner masks the FlatList and the user never
+  // sees the thinking bubble that's supposed to appear immediately on
+  // notification tap.
+  if (loading && !loaded && !firingCategory) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
@@ -96,14 +120,18 @@ export function ChatScreen(_props: Props): JSX.Element {
           data.length === 0 ? styles.emptyMessageList : null,
         ]}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No messages yet</Text>
-            <Text style={styles.emptyText}>Say something to Gus.</Text>
-          </View>
+          firingCategory || loading ? null : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No messages yet</Text>
+              <Text style={styles.emptyText}>Say something to Gus.</Text>
+            </View>
+          )
         }
-        ListFooterComponent={sending ? <ThinkingBubble /> : null}
+        ListFooterComponent={
+          sending || firingCategory ? <ThinkingBubble category={firingCategory} /> : null
+        }
         keyboardShouldPersistTaps="handled"
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={scrollToBottom}
       />
 
       <View style={styles.composer}>
@@ -150,8 +178,9 @@ function MessageBubble({
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.gusRow]}>
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.gusBubble]}>
+        <CategoryChip message={message} />
         <Text style={[styles.messageHeader, isUser ? styles.userHeader : styles.gusHeader]}>
-          {formatMessageHeader(message)}
+          {isUser ? 'You' : 'Gus'}
         </Text>
         <Text style={[styles.messageText, isUser ? styles.userText : styles.gusText]}>
           {message.content}
@@ -216,10 +245,18 @@ function QuickReplies({
   );
 }
 
-function ThinkingBubble(): JSX.Element {
+function ThinkingBubble({ category }: { category: FiringCategory }): JSX.Element {
+  const borderColor = categoryColor(category);
   return (
     <View style={[styles.messageRow, styles.gusRow]}>
-      <View style={[styles.bubble, styles.gusBubble, styles.thinkingBubble]}>
+      <View
+        style={[
+          styles.bubble,
+          styles.gusBubble,
+          styles.thinkingBubble,
+          borderColor ? { borderColor, borderWidth: 1.5 } : null,
+        ]}
+      >
         <ActivityIndicator size="small" />
         <Text style={styles.thinkingText}>Gus is thinking...</Text>
       </View>
@@ -227,20 +264,43 @@ function ThinkingBubble(): JSX.Element {
   );
 }
 
-function formatMessageHeader(message: ChatMessage): string {
-  const sender = message.role === 'gus' ? 'Gus' : 'You';
-  if (!message.category) return sender;
-  return `${sender} - ${formatCategory(message.category)}`;
+function CategoryChip({ message }: { message: ChatMessage }): JSX.Element | null {
+  // The voice-prompt 'gus_intro' kind lands in Phase 8; reserved violet color
+  // below is unused until then.
+  if (!message.category) return null;
+  const color = categoryColor(message.category);
+  const label = categoryLabel(message.category);
+  if (!color || !label) return null;
+  return (
+    <View style={[styles.categoryChip, { backgroundColor: color }]}>
+      <Text style={styles.categoryChipText}>{label}</Text>
+    </View>
+  );
 }
 
-function formatCategory(category: NonNullable<ChatMessage['category']>): string {
+function categoryColor(category: FiringCategory): string | null {
+  switch (category) {
+    case 'morning_check_in':
+      return '#F59E0B';
+    case 'walk_reminder':
+      return '#059669';
+    case 'post_walk_debrief':
+      return '#0EA5E9';
+    case 'gus_intro':
+      return '#7C3AED';
+    default:
+      return null;
+  }
+}
+
+function categoryLabel(category: NonNullable<ChatMessage['category']>): string {
   switch (category) {
     case 'morning_check_in':
       return 'Morning check-in';
     case 'walk_reminder':
       return 'Walk reminder';
     case 'post_walk_debrief':
-      return 'Post walk debrief';
+      return 'Post-walk debrief';
   }
 }
 
@@ -325,6 +385,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 4,
+  },
+  categoryChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
+  categoryChipText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   gusHeader: { color: '#6B7280' },
   userHeader: { color: '#9CA3AF' },

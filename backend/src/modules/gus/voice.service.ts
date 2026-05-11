@@ -97,6 +97,11 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     return fallbackForCategory(categoryKey);
   }
 
+  // Chat replies are short by design; the lower cap is the easiest first-token
+  // latency win without changing vendors. Notification flavors get the full
+  // budget because they may pack a short scene + a quick-reply hook.
+  const maxTokens = categoryKey === 'chat' ? 180 : 320;
+
   const callOnce = async (extraSystem?: string): Promise<string> => {
     const fullSystem = extraSystem ? `${systemPrompt}\n\n${extraSystem}` : systemPrompt;
     if (provider === 'xai') {
@@ -104,12 +109,14 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
         model,
         system: fullSystem,
         messages,
+        maxTokens,
       });
     }
     return await callAnthropic({
       model,
       system: fullSystem,
       messages,
+      maxTokens,
     });
   };
 
@@ -186,6 +193,7 @@ async function callAnthropic(input: {
   model: GusModel;
   system: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  maxTokens: number;
 }): Promise<string> {
   const anthropic = (await loadAnthropic()) as null | {
     messages: {
@@ -198,7 +206,7 @@ async function callAnthropic(input: {
 
   const response = await anthropic.messages.create({
     model: input.model,
-    max_tokens: 320,
+    max_tokens: input.maxTokens,
     system: input.system,
     messages: input.messages,
   });
@@ -213,6 +221,7 @@ async function callXai(input: {
   model: string;
   system: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  maxTokens: number;
 }): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.GUS_LLM_TIMEOUT_MS);
@@ -226,7 +235,7 @@ async function callXai(input: {
       body: JSON.stringify({
         model: input.model,
         stream: false,
-        max_tokens: 320,
+        max_tokens: input.maxTokens,
         messages: [
           { role: 'system', content: input.system },
           ...input.messages,

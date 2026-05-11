@@ -137,8 +137,21 @@ export function MapScreen(): JSX.Element {
         setShowRecenterButton(false);
         return;
       }
+      if (following) {
+        setShowRecenterButton(false);
+        return;
+      }
+      // bbox visibility is only reliable near pitch=0. At higher pitch the
+      // reported bounds extends far past the visible trapezoid (toward the
+      // horizon), so isCoordinateInBounds returns true even when the user is
+      // clearly off-screen. Fall back to "show whenever not following" when
+      // the camera is tilted.
+      if (cameraStateRef.current.pitch > 5) {
+        setShowRecenterButton(true);
+        return;
+      }
       const userIsVisible = isCoordinateInBounds(latestUserCoordinate, bounds);
-      setShowRecenterButton(!following && !userIsVisible);
+      setShowRecenterButton(!userIsVisible);
     },
     [latestUserCoordinate],
   );

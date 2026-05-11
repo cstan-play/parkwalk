@@ -9,12 +9,22 @@ import {
 } from '@/services/gusApi';
 import { describeApiError } from '@/util/describeApiError';
 
+function clientUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export type FiringCategory = GusNotificationCategory | 'gus_intro' | null;
+
 interface ChatStoreState {
   messages: ChatMessage[];
   loading: boolean;
   sending: boolean;
   replyingToMessageId: string | null;
-  firingCategory: GusNotificationCategory | null;
+  firingCategory: FiringCategory;
   loaded: boolean;
   error: string | null;
   loadMessages: () => Promise<void>;
@@ -47,16 +57,45 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const trimmed = content.trim();
     if (!trimmed || get().sending) return;
 
-    set({ sending: true, error: null });
+    // Optimistic insertion: the user's message lands in the list immediately
+    // and the thinking bubble appears below it; on response we swap the
+    // optimistic id for the server's authoritative record and append Gus.
+    // On failure we roll the optimistic message back out.
+    const localId = clientUuid();
+    const optimisticMessage: ChatMessage = {
+      id: localId,
+      role: 'user',
+      kind: 'user_message',
+      category: null,
+      content: trimmed,
+      quickReplies: null,
+      selectedReply: null,
+      modelUsed: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    set((state) => ({
+      messages: [...state.messages, optimisticMessage],
+      sending: true,
+      error: null,
+    }));
+
     try {
       const result = await sendChat({ content: trimmed });
       set((state) => ({
-        messages: [...state.messages, result.userMessage, result.gusReply],
+        messages: [
+          ...state.messages.map((m) => (m.id === localId ? result.userMessage : m)),
+          result.gusReply,
+        ],
         sending: false,
         loaded: true,
       }));
     } catch (err) {
-      set({ sending: false, error: describeApiError(err) });
+      set((state) => ({
+        messages: state.messages.filter((m) => m.id !== localId),
+        sending: false,
+        error: describeApiError(err),
+      }));
     }
   },
 

@@ -9,7 +9,7 @@ import { readNotificationStatus } from './permissions';
 const GUS_NOTIFICATION_PREFIX = 'gus.';
 const CHANNEL_ID = 'gus-reminders';
 const POST_WALK_DELAY_MS = 10 * 60 * 1000;
-const TEST_DELAY_MS = 30 * 1000;
+const TEST_DELAY_MS = 15 * 1000;
 
 export type NotificationScheduleResult =
   | { scheduled: true }
