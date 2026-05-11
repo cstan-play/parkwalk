@@ -12,3 +12,7 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export function clearUserScopedQueryCache(): void {
+  queryClient.clear();
+}

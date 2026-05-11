@@ -1,6 +1,8 @@
 import type { AuthUser, TokenPair } from '@parkwalk/shared';
 import * as Keychain from 'react-native-keychain';
 
+import { queryClient } from '@/services/queryClient';
+
 import { useAuthStore } from './authStore';
 
 const tokens: TokenPair = {
@@ -22,7 +24,12 @@ const user: AuthUser = {
 describe('authStore persistence', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(queryClient, 'clear').mockImplementation(() => undefined);
     useAuthStore.setState({ user: null, tokens: null, isAuthenticated: false });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('persists tokens and user together on login', async () => {
@@ -39,6 +46,20 @@ describe('authStore persistence', () => {
       expect.objectContaining({ service: 'parkwalk.auth.user' }),
     );
     expect(useAuthStore.getState()).toMatchObject({ user, tokens, isAuthenticated: true });
+    expect(queryClient.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears user-scoped query cache on logout', async () => {
+    await useAuthStore.getState().logout();
+
+    expect(Keychain.resetGenericPassword).toHaveBeenCalledWith({ service: 'parkwalk.auth' });
+    expect(Keychain.resetGenericPassword).toHaveBeenCalledWith({ service: 'parkwalk.auth.user' });
+    expect(queryClient.clear).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState()).toMatchObject({
+      user: null,
+      tokens: null,
+      isAuthenticated: false,
+    });
   });
 
   it('hydrates only when tokens and user are both present', async () => {

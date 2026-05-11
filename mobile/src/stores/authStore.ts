@@ -1,6 +1,7 @@
 import type { AuthUser, TokenPair } from '@parkwalk/shared';
 import { create } from 'zustand';
 
+import { clearUserScopedQueryCache } from '@/services/queryClient';
 import { clearTokens, loadTokens, loadUser, saveAuthSession } from '@/services/secureStorage';
 
 interface AuthState {
@@ -34,6 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   setAuthenticated: async (user, tokens) => {
     await saveAuthSession(tokens, user);
+    clearUserScopedQueryCache();
     set({ user, tokens, isAuthenticated: true });
   },
   setTokens: (tokens) => {
@@ -41,6 +43,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: async () => {
     await clearTokens();
+    clearUserScopedQueryCache();
     set({ user: null, tokens: null, isAuthenticated: false });
   },
 }));
