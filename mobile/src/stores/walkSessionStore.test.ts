@@ -359,6 +359,7 @@ function completedSession(overrides: Partial<LocalWalkSession>): LocalWalkSessio
     distanceMeters: 0,
     stepCount: 0,
     collectedEntityIds: [],
+    collectedSmells: [],
     lastMovementAt: '2026-04-29T09:10:00.000Z',
     syncState: 'synced',
     ...overrides,

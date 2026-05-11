@@ -23,6 +23,7 @@ import {
   getPausedDurationSeconds,
   useWalkSessionStore,
   type LocalWalkSession,
+  type SmellCollection,
 } from '@/stores/walkSessionStore';
 import { haversineMeters } from '@/util/geo';
 
@@ -228,11 +229,10 @@ export function MapScreen(): JSX.Element {
     },
     onSuccess: (_data, entity) => {
       setCollectUi({ kind: 'idle' });
-      void markCollected(entity.id);
-      Alert.alert(
-        'Collected!',
-        `+${Number((entity.config as { points?: number }).points ?? 0)} points`,
-      );
+      const smellMeta = extractSmellMeta(entity);
+      void markCollected(entity.id, smellMeta);
+      const points = Number((entity.config as { points?: number }).points ?? 0);
+      Alert.alert('Collected!', `+${points} points`);
       void queryClient.invalidateQueries({ queryKey: ['nearby'] });
       void queryClient.invalidateQueries({ queryKey: ['myStats'] });
     },
@@ -577,6 +577,44 @@ function formatDuration(seconds: number): string {
 
 function roundKey(lat: number, lng: number): string {
   return `${lat.toFixed(3)},${lng.toFixed(3)}`;
+}
+
+/**
+ * Reads smell meta from an entity's config (typed in Phase 5). Returns null
+ * for legacy entities whose config predates the smellType field — those
+ * still mark collected but show up in `byType: {}` on the detail summary.
+ */
+function extractSmellMeta(entity: GameEntity): SmellCollection | undefined {
+  const config = (entity.config ?? {}) as {
+    smellType?: unknown;
+    name?: unknown;
+    points?: unknown;
+    gusFlavor?: unknown;
+  };
+  const smellType = config.smellType;
+  if (!isSmellType(smellType)) return undefined;
+  return {
+    entityId: entity.id,
+    smellType,
+    name: typeof config.name === 'string' ? config.name : 'Mystery smell',
+    points: typeof config.points === 'number' ? config.points : 0,
+    collectedAt: new Date().toISOString(),
+    gusFlavor: typeof config.gusFlavor === 'string' ? config.gusFlavor : undefined,
+  };
+}
+
+const SMELL_TYPE_SET: ReadonlySet<string> = new Set([
+  'other_dogs_pee',
+  'real_poop',
+  'picked_up_poop',
+  'humans',
+  'neighbours',
+  'pigeons',
+  'birds',
+]);
+
+function isSmellType(value: unknown): value is SmellCollection['smellType'] {
+  return typeof value === 'string' && SMELL_TYPE_SET.has(value);
 }
 
 function isCoordinateInBounds(coordinate: Position, bounds: VisibleBounds): boolean {

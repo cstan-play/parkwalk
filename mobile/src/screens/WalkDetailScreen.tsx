@@ -1,4 +1,4 @@
-import type { WalkSession } from '@parkwalk/shared';
+import type { SmellType, WalkSession } from '@parkwalk/shared';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import MapboxGL, { type Camera as MapboxCamera } from '@rnmapbox/maps';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,11 @@ import { PARKWALK_MAP_STYLE_URL } from '@/config/mapStyle';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { fetchWalk } from '@/services/walksApi';
 import { useWalkSessionStore, type LocalWalkSession } from '@/stores/walkSessionStore';
+import {
+  describeWalkSmells,
+  type DescribeWalkSmellsOutput,
+  type TimeOfDayBucket,
+} from '@/utils/smells';
 
 type Route = RouteProp<RootStackParamList, 'WalkDetail'>;
 const DETAIL_OVERVIEW_ZOOM = 12;
@@ -84,6 +89,11 @@ export function WalkDetailScreen(): JSX.Element {
     );
   }
 
+  const smellsSummary = useMemo(
+    () => buildSmellsSummary(walk),
+    [walk],
+  );
+
   const endedAt = walk.endedAt ?? walk.startedAt;
   const durationSeconds = Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(walk.startedAt)) / 1000));
   const pausedSeconds =
@@ -134,10 +144,68 @@ export function WalkDetailScreen(): JSX.Element {
         <Stat label="Moving" value={formatDuration(movingSeconds)} />
         <Stat label="Paused" value={formatDuration(pausedSeconds)} />
         <Stat label="Total" value={formatDuration(durationSeconds)} />
-        <Stat label="Collected" value={`${getCollectedCount(walk)}`} />
+        <Stat label="New smells found" value={`${getCollectedCount(walk)}`} />
       </View>
+      {smellsSummary ? <SmellsSummary summary={smellsSummary} /> : null}
     </ScrollView>
   );
+}
+
+function SmellsSummary({ summary }: { summary: DescribeWalkSmellsOutput }): JSX.Element {
+  return (
+    <View style={styles.smellsBlock}>
+      <Text style={styles.smellsHeadline}>{summary.headline}</Text>
+      {summary.lines.map((line, idx) => (
+        <Text key={idx} style={styles.smellLine}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+function buildSmellsSummary(
+  walk: LocalWalkSession | WalkSession,
+): DescribeWalkSmellsOutput | null {
+  const byType = readByType(walk);
+  if (!byType) return null;
+  return describeWalkSmells({
+    byType,
+    weather: readWeather(walk),
+    timeOfDay: timeOfDayFromIso(walk.startedAt),
+    walkSeed: walk.clientId,
+  });
+}
+
+function readByType(walk: LocalWalkSession | WalkSession): Partial<Record<SmellType, number>> | null {
+  if ('collectedSmells' in walk) {
+    const counts: Partial<Record<SmellType, number>> = {};
+    for (const smell of walk.collectedSmells) {
+      counts[smell.smellType] = (counts[smell.smellType] ?? 0) + 1;
+    }
+    return counts;
+  }
+  if ('smells' in walk && walk.smells) {
+    return walk.smells.byType;
+  }
+  return null;
+}
+
+function readWeather(walk: LocalWalkSession | WalkSession): string | null {
+  if ('weatherSnapshot' in walk && walk.weatherSnapshot) {
+    return walk.weatherSnapshot;
+  }
+  return null;
+}
+
+function timeOfDayFromIso(iso: string): TimeOfDayBucket {
+  const d = new Date(iso);
+  const h = Number.isFinite(d.getHours()) ? d.getHours() : 12;
+  if (h < 5) return 'night';
+  if (h < 12) return 'morning';
+  if (h < 17) return 'midday';
+  if (h < 22) return 'evening';
+  return 'night';
 }
 
 function getCollectedCount(walk: LocalWalkSession | WalkSession): number {
@@ -202,4 +270,24 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
   statLabel: { marginTop: 3, color: '#6B7280', fontSize: 12, textTransform: 'uppercase' },
+  smellsBlock: {
+    marginTop: 14,
+    padding: 14,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  smellsHeadline: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  smellLine: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    marginTop: 4,
+  },
 });

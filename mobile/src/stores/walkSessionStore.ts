@@ -1,6 +1,7 @@
 import type {
   Location,
   MovementSample,
+  SmellType,
   SyncWalkRequest,
   WalkPathPoint,
   WalkPathSegment,
@@ -48,6 +49,15 @@ export interface SimpleLocation {
   longitude: number;
 }
 
+export interface SmellCollection {
+  entityId: string;
+  smellType: SmellType;
+  name: string;
+  points: number;
+  collectedAt: string;
+  gusFlavor?: string;
+}
+
 export interface LocalWalkSession {
   clientId: string;
   status: ActiveWalkStatus | CompletedWalkStatus;
@@ -73,6 +83,12 @@ export interface LocalWalkSession {
   /** Captured at startWalk() from `initialLocation`; used as a fallback for
    *  the detail map center when the walk has no GPS samples. */
   startLocation?: SimpleLocation;
+  /**
+   * Per-walk smell rollup with full meta. Mirrors `collectedEntityIds` but
+   * carries the smellType/name/points read from the entity's config at
+   * collect time. Defaults to [] on rehydrate of older AsyncStorage rows.
+   */
+  collectedSmells: SmellCollection[];
 }
 
 interface PersistedState {
@@ -99,7 +115,7 @@ interface WalkSessionState extends PersistedState {
   setNativeStepCount: (steps: number, recordedAt?: string) => Promise<void>;
   markAutoPromptShown: () => Promise<void>;
   continueAfterAutoPrompt: () => Promise<void>;
-  markCollected: (entityId: string) => Promise<void>;
+  markCollected: (entityId: string, smellMeta?: SmellCollection) => Promise<void>;
   syncPendingWalks: () => Promise<void>;
 }
 
@@ -173,6 +189,7 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       autoFinished: false,
       autoFinishReason: null,
       startLocation,
+      collectedSmells: [],
     };
     set({
       activeSession,
@@ -354,13 +371,16 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     await persist(get());
   },
 
-  markCollected: async (entityId) => {
+  markCollected: async (entityId, smellMeta) => {
     const session = get().activeSession;
     if (!session || session.collectedEntityIds.includes(entityId)) return;
     set({
       activeSession: {
         ...session,
         collectedEntityIds: [...session.collectedEntityIds, entityId],
+        collectedSmells: smellMeta
+          ? [...session.collectedSmells, smellMeta]
+          : session.collectedSmells,
       },
     });
     await persist(get());
@@ -644,6 +664,7 @@ function normalizeLocalSession(session: LocalWalkSession): LocalWalkSession {
       (session.status === 'active' ? session.startedAt : undefined),
     nativeStepBase: session.nativeStepBase ?? 0,
     currentNativeIntervalSteps: session.currentNativeIntervalSteps ?? 0,
+    collectedSmells: session.collectedSmells ?? [],
   };
 }
 
