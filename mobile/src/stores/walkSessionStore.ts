@@ -143,11 +143,12 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       const raw = await AsyncStorage.getItem(storageKeyForOwner(normalizedOwnerId));
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedState>;
-        const activeSession = parsed.activeSession ? normalizeLocalSession(parsed.activeSession) : null;
+        const activeSession = normalizeActiveSession(parsed.activeSession);
+        const completedSessions = normalizeCompletedSessions(parsed.completedSessions);
         set({
           ownerId: normalizedOwnerId,
           activeSession,
-          completedSessions: parsed.completedSessions ?? [],
+          completedSessions,
           hydrated: true,
           recoveryPromptPending: !!activeSession,
           lastKnownLocation: parsed.lastKnownLocation,
@@ -689,18 +690,212 @@ function retainCompletedSessions(sessions: LocalWalkSession[]): LocalWalkSession
   return [...unsynced, ...synced];
 }
 
-function normalizeLocalSession(session: LocalWalkSession): LocalWalkSession {
+function normalizeCompletedSessions(value: unknown): LocalWalkSession[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((session) => {
+    const normalized = normalizeLocalSession(session, 'completed');
+    if (!normalized) return [];
+    if (normalized.status === 'active' || normalized.status === 'paused') {
+      return [{
+        ...normalized,
+        status: 'completed',
+        endedAt: normalized.endedAt ?? normalized.lastMovementAt,
+        activeStepIntervals: [],
+        currentStepIntervalStartedAt: undefined,
+        currentNativeIntervalSteps: 0,
+      }];
+    }
+    return [normalized];
+  });
+}
+
+function normalizeActiveSession(value: unknown): LocalWalkSession | null {
+  const normalized = normalizeLocalSession(value, 'active', 'pending');
+  if (!normalized || (normalized.status !== 'active' && normalized.status !== 'paused')) return null;
+  return normalized;
+}
+
+function normalizeLocalSession(
+  session: unknown,
+  fallbackStatus: LocalWalkSession['status'],
+  fallbackSyncState?: SyncState,
+): LocalWalkSession | null {
+  if (!isRecord(session)) return null;
+  const now = new Date().toISOString();
+  const clientId = typeof session.clientId === 'string' && session.clientId ? session.clientId : createUuid();
+  const startedAt = readTimestamp(session.startedAt) ?? now;
+  const status = isWalkStatus(session.status) ? session.status : fallbackStatus;
+  const serverId = typeof session.serverId === 'string' ? session.serverId : undefined;
+  const syncState = isSyncState(session.syncState)
+    ? session.syncState
+    : fallbackSyncState ?? 'synced';
+  const syncError =
+    typeof session.syncError === 'string'
+      ? session.syncError
+      : syncState === 'failed'
+        ? 'Recovered from older local data; not automatically synced.'
+        : undefined;
   return {
     ...session,
-    pathSegments: session.pathSegments ?? [],
-    activeStepIntervals: session.activeStepIntervals ?? [],
+    clientId,
+    status,
+    startedAt,
+    endedAt: readTimestamp(session.endedAt),
+    pauseIntervals: normalizeOpenIntervals(session.pauseIntervals),
+    pathSegments: normalizePathSegments(session.pathSegments),
+    distanceMeters: readNonNegativeNumber(session.distanceMeters),
+    stepCount: Math.round(readNonNegativeNumber(session.stepCount)),
+    collectedEntityIds: Array.isArray(session.collectedEntityIds)
+      ? session.collectedEntityIds.filter((id): id is string => typeof id === 'string')
+      : [],
+    lastMovementAt: readTimestamp(session.lastMovementAt) ?? startedAt,
+    activeStepIntervals: normalizeClosedIntervals(session.activeStepIntervals),
     currentStepIntervalStartedAt:
-      session.currentStepIntervalStartedAt ??
-      (session.status === 'active' ? session.startedAt : undefined),
-    nativeStepBase: session.nativeStepBase ?? 0,
-    currentNativeIntervalSteps: session.currentNativeIntervalSteps ?? 0,
-    collectedSmells: session.collectedSmells ?? [],
+      readTimestamp(session.currentStepIntervalStartedAt) ??
+      (status === 'active' ? startedAt : undefined),
+    nativeStepBase: readNonNegativeNumber(session.nativeStepBase),
+    currentNativeIntervalSteps: readNonNegativeNumber(session.currentNativeIntervalSteps),
+    syncState,
+    serverId,
+    syncError,
+    autoFinished: typeof session.autoFinished === 'boolean' ? session.autoFinished : false,
+    autoFinishReason: typeof session.autoFinishReason === 'string' ? session.autoFinishReason : null,
+    usesNativeSteps: typeof session.usesNativeSteps === 'boolean' ? session.usesNativeSteps : undefined,
+    startLocation: isSimpleLocation(session.startLocation) ? session.startLocation : undefined,
+    collectedSmells: normalizeCollectedSmells(session.collectedSmells),
   };
+}
+
+function normalizePathSegments(value: unknown): LocalWalkPathSegment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((segment) => {
+    if (!isRecord(segment)) return [];
+    const startedAt = readTimestamp(segment.startedAt) ?? new Date().toISOString();
+    const points = Array.isArray(segment.points)
+      ? segment.points.flatMap((point) => {
+          const normalized = normalizeWalkPathPoint(point, startedAt);
+          return normalized ? [normalized] : [];
+        })
+      : [];
+    return [{
+      startedAt,
+      endedAt: readTimestamp(segment.endedAt),
+      points,
+    }];
+  });
+}
+
+function normalizeOpenIntervals(value: unknown): WalkPauseInterval[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((interval) => {
+    if (!isRecord(interval)) return [];
+    const startedAt = readTimestamp(interval.startedAt);
+    if (!startedAt) return [];
+    return [{
+      startedAt,
+      endedAt: readTimestamp(interval.endedAt),
+    }];
+  });
+}
+
+function normalizeClosedIntervals(value: unknown): WalkStepInterval[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((interval) => {
+    if (!isRecord(interval)) return [];
+    const startedAt = readTimestamp(interval.startedAt);
+    const endedAt = readTimestamp(interval.endedAt);
+    if (!startedAt || !endedAt) return [];
+    return [{ startedAt, endedAt }];
+  });
+}
+
+function normalizeCollectedSmells(value: unknown): SmellCollection[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((smell) => {
+    if (!isRecord(smell) || typeof smell.entityId !== 'string' || !isSmellType(smell.smellType)) {
+      return [];
+    }
+    return [{
+      entityId: smell.entityId,
+      smellType: smell.smellType,
+      name: typeof smell.name === 'string' ? smell.name : 'Unknown smell',
+      points: Math.round(readNonNegativeNumber(smell.points)),
+      collectedAt: readTimestamp(smell.collectedAt) ?? new Date().toISOString(),
+      gusFlavor: typeof smell.gusFlavor === 'string' ? smell.gusFlavor : undefined,
+    }];
+  });
+}
+
+function normalizeWalkPathPoint(value: unknown, fallbackRecordedAt: string): WalkPathPoint | null {
+  if (!isRecord(value) || !isLatitude(value.latitude) || !isLongitude(value.longitude)) return null;
+  const point: WalkPathPoint = {
+    latitude: value.latitude,
+    longitude: value.longitude,
+    recordedAt: readTimestamp(value.recordedAt) ?? fallbackRecordedAt,
+    source: value.source === 'best_fix' ? 'best_fix' : 'gps',
+  };
+  if (typeof value.accuracy === 'number' && Number.isFinite(value.accuracy) && value.accuracy >= 0) {
+    point.accuracy = value.accuracy;
+  }
+  if (typeof value.altitude === 'number' && Number.isFinite(value.altitude)) {
+    point.altitude = value.altitude;
+  }
+  if (
+    typeof value.stepCountTotal === 'number' &&
+    Number.isFinite(value.stepCountTotal) &&
+    value.stepCountTotal >= 0
+  ) {
+    point.stepCountTotal = Math.round(value.stepCountTotal);
+  }
+  return point;
+}
+
+function readTimestamp(value: unknown): string | undefined {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
+function readNonNegativeNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isWalkStatus(value: unknown): value is LocalWalkSession['status'] {
+  return value === 'active' ||
+    value === 'paused' ||
+    value === 'completed' ||
+    value === 'auto_completed' ||
+    value === 'recovered_after_termination';
+}
+
+function isSyncState(value: unknown): value is SyncState {
+  return value === 'pending' || value === 'syncing' || value === 'synced' || value === 'failed';
+}
+
+function isSimpleLocation(value: unknown): value is SimpleLocation {
+  return isRecord(value) &&
+    isLatitude(value.latitude) &&
+    isLongitude(value.longitude);
+}
+
+function isLatitude(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -90 && value <= 90;
+}
+
+function isLongitude(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -180 && value <= 180;
+}
+
+function isSmellType(value: unknown): value is SmellType {
+  return value === 'other_dogs_pee' ||
+    value === 'real_poop' ||
+    value === 'picked_up_poop' ||
+    value === 'humans' ||
+    value === 'neighbours' ||
+    value === 'pigeons' ||
+    value === 'birds';
 }
 
 function createUuid(): string {

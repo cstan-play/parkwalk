@@ -175,6 +175,59 @@ describe('walkSessionStore stabilization behavior', () => {
     expect(await AsyncStorage.getItem('parkwalk.walk_sessions.v2.user-a')).toBeNull();
   });
 
+  it('normalizes corrupt completed walk rows during hydrate', async () => {
+    await AsyncStorage.setItem(
+      'parkwalk.walk_sessions.v3.user-a',
+      JSON.stringify({
+        ownerId: 'user-a',
+        activeSession: null,
+        completedSessions: [
+          {
+            clientId: 'corrupt-walk',
+            status: 'completed',
+            startedAt: '2026-04-29T09:00:00.000Z',
+            pathSegments: [
+              {
+                startedAt: '2026-04-29T09:00:00.000Z',
+                points: [
+                  { latitude: 55.6761, longitude: 12.5683, recordedAt: '2026-04-29T09:00:00.000Z' },
+                  { latitude: 'bad', longitude: 12.5684, recordedAt: '2026-04-29T09:01:00.000Z' },
+                ],
+              },
+            ],
+            collectedEntityIds: [123, 'entity-a'],
+            collectedSmells: [
+              { entityId: 'entity-a', smellType: 'pigeons', collectedAt: '2026-04-29T09:01:00.000Z' },
+              { entityId: 'entity-b', smellType: 'unknown' },
+            ],
+          },
+          null,
+        ],
+      }),
+    );
+
+    await useWalkSessionStore.getState().hydrate('user-a');
+
+    const [walk] = useWalkSessionStore.getState().completedSessions;
+    expect(useWalkSessionStore.getState().completedSessions).toHaveLength(1);
+    expect(walk?.clientId).toBe('corrupt-walk');
+    expect(walk?.distanceMeters).toBe(0);
+    expect(walk?.stepCount).toBe(0);
+    expect(walk?.syncState).toBe('synced');
+    expect(walk?.pathSegments[0]?.points).toHaveLength(1);
+    expect(walk?.collectedEntityIds).toEqual(['entity-a']);
+    expect(walk?.collectedSmells).toEqual([
+      {
+        entityId: 'entity-a',
+        smellType: 'pigeons',
+        name: 'Unknown smell',
+        points: 0,
+        collectedAt: '2026-04-29T09:01:00.000Z',
+        gusFlavor: undefined,
+      },
+    ]);
+  });
+
   it('does not persist on every native step update', async () => {
     await useWalkSessionStore.getState().startWalk(baseLocation);
     (AsyncStorage.setItem as jest.Mock).mockClear();

@@ -40,8 +40,15 @@ export function WalkDetailScreen(): JSX.Element {
   const walk = localWalk ?? remote.data ?? null;
   const coordinates = useMemo<Position[][]>(() => {
     if (!walk) return [];
-    return walk.pathSegments
-      .map((segment) => segment.points.map((point) => [point.longitude, point.latitude] as Position))
+    const pathSegments = Array.isArray(walk.pathSegments) ? walk.pathSegments : [];
+    return pathSegments
+      .map((segment) =>
+        Array.isArray(segment.points)
+          ? segment.points
+              .filter(isRenderablePoint)
+              .map((point) => [point.longitude, point.latitude] as Position)
+          : [],
+      )
       .filter((segment) => segment.length >= 2);
   }, [walk]);
   const shape = useMemo(
@@ -81,6 +88,11 @@ export function WalkDetailScreen(): JSX.Element {
     });
   }, [center, centerKey, mapLoaded, walk]);
 
+  const smellsSummary = useMemo(
+    () => (walk ? buildSmellsSummary(walk) : null),
+    [walk],
+  );
+
   if (!walk) {
     return (
       <View style={styles.center}>
@@ -88,11 +100,6 @@ export function WalkDetailScreen(): JSX.Element {
       </View>
     );
   }
-
-  const smellsSummary = useMemo(
-    () => buildSmellsSummary(walk),
-    [walk],
-  );
 
   const endedAt = walk.endedAt ?? walk.startedAt;
   const durationSeconds = Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(walk.startedAt)) / 1000));
@@ -223,6 +230,20 @@ function timeOfDayFromIso(iso: string): TimeOfDayBucket {
 function getCollectedCount(walk: LocalWalkSession | WalkSession): number {
   if ('collectedEntityIds' in walk) return walk.collectedEntityIds.length;
   return walk.collectedCount;
+}
+
+function isRenderablePoint(value: unknown): value is { latitude: number; longitude: number } {
+  if (typeof value !== 'object' || value === null) return false;
+  const latitude = (value as { latitude?: unknown }).latitude;
+  const longitude = (value as { longitude?: unknown }).longitude;
+  return typeof latitude === 'number' &&
+    typeof longitude === 'number' &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
 }
 
 function Stat({ label, value }: { label: string; value: string }): JSX.Element {
