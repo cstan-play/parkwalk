@@ -265,11 +265,10 @@ function ThinkingBubble({ category }: { category: FiringCategory }): JSX.Element
 }
 
 function CategoryChip({ message }: { message: ChatMessage }): JSX.Element | null {
-  // The voice-prompt 'gus_intro' kind lands in Phase 8; reserved violet color
-  // below is unused until then.
-  if (!message.category) return null;
-  const color = categoryColor(message.category);
-  const label = categoryLabel(message.category);
+  const chipKey = message.kind === 'gus_intro' ? 'gus_intro' : message.category;
+  if (!chipKey) return null;
+  const color = categoryColor(chipKey);
+  const label = categoryLabel(chipKey);
   if (!color || !label) return null;
   return (
     <View style={[styles.categoryChip, { backgroundColor: color }]}>
@@ -293,8 +292,10 @@ function categoryColor(category: FiringCategory): string | null {
   }
 }
 
-function categoryLabel(category: NonNullable<ChatMessage['category']>): string {
+function categoryLabel(category: Exclude<FiringCategory, null>): string {
   switch (category) {
+    case 'gus_intro':
+      return 'Welcome';
     case 'morning_check_in':
       return 'Morning check-in';
     case 'walk_reminder':

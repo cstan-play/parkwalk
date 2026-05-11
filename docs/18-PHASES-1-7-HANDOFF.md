@@ -157,16 +157,18 @@ effect on every movement/state change.
 **New files**
 
 - `mobile/src/services/soundCue.ts` — no-throw cue. Preloads
-  `assets/sounds/smell-found.wav` (a 4.4 kB silent placeholder; drop a real
-  ~100 ms WAV at the same path to enable audible playback, no code change
-  needed). `Sound.setCategory('Ambient', true)` so the cue doesn't fight
-  Apple Music / Spotify on iOS.
+  `assets/sounds/smell-found.wav`. The current asset is a real 4.0 s stereo
+  48 kHz PCM WAV (768 KB, SHA-256
+  `e6068472aafebb7d711601aba181899b933e560a608d9bcd42f09fd69a284e3f`).
+  `Sound.setCategory('Ambient', true)` so the cue doesn't fight Apple Music /
+  Spotify on iOS.
 - `mobile/src/components/ui/SmellToast.tsx` — auto-dismiss bottom toast.
   `pointerEvents="none"`, ~1.6 s dismiss, 200 ms fade. The `onHidden`
   callback is held in a ref so callers don't have to memoize — a parent
   re-render (e.g. `MapScreen`'s 1 Hz nowTick) does not restart the dismiss
   timer.
-- `mobile/src/assets/sounds/smell-found.wav` — silent placeholder.
+- `mobile/src/assets/sounds/smell-found.wav` — real smell-found cue for the
+  verification build.
 
 **MapScreen rewiring**
 
@@ -266,10 +268,12 @@ slipped in by accident.
   Recipe to surface the full taxonomy: purge auto-seeded collectibles older
   than the Phase 5 deploy and let `ensureNearbyCollectibles` re-seed them
   with `placement.version: 2` configs.
-- **Sound is silent in the build.** Bundled WAV is a 4.4 kB placeholder so
-  the build never fails on missing asset. Drop a royalty-free ~100 ms cue
-  at `mobile/src/assets/sounds/smell-found.wav` (same filename) to make it
-  audible; `soundCue.ts` requires no changes.
+- **Sound cue is real in the next build.** The placeholder has been replaced
+  with a 4.0 s WAV at `mobile/src/assets/sounds/smell-found.wav`. Verify the
+  timing on device: a single collect should feel tied to toast/haptic, and
+  clustered sequential collects should not create annoying overlap or a long
+  audio pile-up. If it feels noisy, shorten/replace the WAV before changing
+  auto-collect logic.
 - **Auto-collect is foreground-only.** `appStateRef` gates the drain
   effect. If the user backgrounds the app mid-walk, no collect attempts
   fire until they return to foreground. This is V1-intentional — keeping
@@ -309,22 +313,50 @@ slipped in by accident.
 - Haptic: **fixed** (was `impactLight`, now `impactMedium`).
 - Toast dismissing: **fixed** (ref-pattern fix in `SmellToast.tsx`).
 - Walk detail rendering: **fixed** (fallback headline when `byType` is empty).
-- Sound: silent because of placeholder WAV.
+- Sound: real 4.0 s cue installed; still needs device verification for
+  timing, overlap in clusters, and `Ambient` behaviour with other audio.
 - Pause/resume, cooldown-on-network-error, background-app gating: not
   field-tested yet.
 
+**Sound-specific checks for the next verification build:**
+
+- Single auto-collect: cue starts promptly and feels tied to toast/haptic.
+- Cluster auto-collect: sequential finds do not create annoying overlap.
+- Pause/resume: cue only plays for successful foreground auto-collects.
+- Silent-mode/music: `Ambient` behaviour is acceptable and does not interrupt
+  other audio unexpectedly.
+- Failure safety: `playSmellFound()` still no-ops if playback fails.
+
 ## What's left
 
-### Phase 8 — Gus intro + persona finalize (not started)
+### Phase 8 — Gus intro + persona finalize (implemented locally, needs field test)
 
-Needs user-supplied copy for `gus_intro` fewshots and for the PREAMBLE
-warmth / innocent-genius / self-aware sections. Plan file section D has
-the spec. No code yet.
+- `shared/src/schemas/gus.ts`: added `kind = "gus_intro"` and
+  `GusIntroResponse`. `gus_intro` is intentionally **not** a notification
+  category.
+- `shared/src/gusVoice/categories.ts`: added `GUS_CATEGORIES.gus_intro`
+  with first-open few-shots. `stockLines: []`, so no banner path exists.
+- `backend/src/modules/gus/gus.router.ts`: new `POST /api/v1/gus/intro`.
+- `backend/src/modules/gus/gus.service.ts`: `ensureIntroMessage()` creates
+  a single welcome row only when the user's chat thread is empty. Existing
+  threads return `{ message: null }`.
+- `mobile/src/stores/chatStore.ts`: after `GET /messages`, an empty thread
+  triggers one session-scoped intro attempt with `firingCategory =
+  "gus_intro"` so the existing thinking bubble appears.
+- `mobile/src/screens/ChatScreen.tsx`: `kind = "gus_intro"` renders a violet
+  `Welcome` chip while keeping `category = null`.
+- `shared/src/gusVoice/systemPrompt.ts` and `BIBLE.md`: softened profanity,
+  added the warmer loyalty / innocent-genius / self-aware companion rules.
+
+Verification still needed: fresh account / cleared chat opens to a single
+welcome message, reload does not re-fire it, and existing threads never get
+an intro inserted retroactively.
 
 ### Phase 9 — final regression sweep (not started)
 
 Full smoke run across all phases before merging `feat/...` to `main`. No
-new code — gated on Phase 7 field-test completion and Phase 8 copy.
+new code — gated on Phase 7 field-test completion and Phase 8 device/API
+verification.
 
 ### Deferred (out of scope for this plan)
 

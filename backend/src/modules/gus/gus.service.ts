@@ -128,6 +128,10 @@ export interface FireNotificationResult {
   message: SharedChatMessage;
 }
 
+export interface EnsureIntroResult {
+  message: SharedChatMessage | null;
+}
+
 export async function sendUserMessage(
   userId: string,
   ownerName: string,
@@ -185,6 +189,52 @@ export async function sendUserMessage(
   });
 
   return result;
+}
+
+export async function ensureIntroMessage(
+  userId: string,
+  ownerName: string,
+): Promise<EnsureIntroResult> {
+  const existing = await prisma.chatMessage.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (existing) return { message: null };
+
+  const profile = await getOrCreateDogProfile(userId);
+  const prefs = await getOrCreateGusPrefs(userId);
+  const context = await assembleContextForPrompt({ userId, ownerName });
+
+  const generated = await generate({
+    dogProfile: profile,
+    context,
+    history: [],
+    categoryKey: 'gus_intro',
+    userMessage: introPrompt(),
+    swearingCeiling: prefs.swearingCeiling as SwearingCeiling,
+    modelOverride: prefs.chatModel,
+  });
+
+  const row = await prisma.$transaction(async (tx) => {
+    const raced = await tx.chatMessage.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (raced) return null;
+
+    return await tx.chatMessage.create({
+      data: {
+        userId,
+        role: 'gus',
+        kind: 'gus_intro',
+        category: null,
+        content: generated.content,
+        modelUsed: generated.modelUsed,
+      },
+    });
+  });
+
+  return { message: row ? rowToMessage(row) : null };
 }
 
 /**
@@ -473,6 +523,15 @@ function notificationPrompt(category: GusNotificationCategory): string {
         'One short Gus message only.',
       ].join(' ');
   }
+}
+
+function introPrompt(): string {
+  return [
+    'Write Gus\'s first chat introduction now.',
+    'This is the first message the user sees in chat.',
+    'One warm, witty Gus message only.',
+    'Do not print labels, markdown, bullet points, or code fences.',
+  ].join(' ');
 }
 
 async function fetchXaiModelOptions(): Promise<GusModelOption[]> {

@@ -8,6 +8,7 @@ export type GusMessageRole = z.infer<typeof gusMessageRoleSchema>;
 export const gusMessageKindSchema = z.enum([
   'user_message',
   'gus_reply',
+  'gus_intro',
   'gus_notification',
   'user_quick_reply',
   'gus_quick_reply_followup',
@@ -161,3 +162,8 @@ export const fireNotificationResponseSchema = z.object({
   message: chatMessageSchema,
 });
 export type FireNotificationResponse = z.infer<typeof fireNotificationResponseSchema>;
+
+export const gusIntroResponseSchema = z.object({
+  message: chatMessageSchema.nullable(),
+});
+export type GusIntroResponse = z.infer<typeof gusIntroResponseSchema>;

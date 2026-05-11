@@ -7,6 +7,7 @@ import {
   type DogProfile,
   type GusContextForPrompt,
   type GusModel,
+  type GusVoiceCategory,
   type SwearingCeiling,
 } from '@parkwalk/shared';
 
@@ -26,7 +27,7 @@ export interface GenerateInput {
    * Set when this is a notification-triggered message. Plain user chat
    * passes 'chat' (or omits — we default to 'chat').
    */
-  categoryKey?: 'chat' | 'morning_check_in' | 'walk_reminder' | 'post_walk_debrief';
+  categoryKey?: GusVoiceCategory;
   /**
    * If the user just sent a message, include it here so it becomes the
    * final user turn. Notification-fire calls leave this undefined.
@@ -100,7 +101,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   // Chat replies are short by design; the lower cap is the easiest first-token
   // latency win without changing vendors. Notification flavors get the full
   // budget because they may pack a short scene + a quick-reply hook.
-  const maxTokens = categoryKey === 'chat' ? 180 : 320;
+  const maxTokens = categoryKey === 'chat' || categoryKey === 'gus_intro' ? 180 : 320;
 
   const callOnce = async (extraSystem?: string): Promise<string> => {
     const fullSystem = extraSystem ? `${systemPrompt}\n\n${extraSystem}` : systemPrompt;
@@ -169,7 +170,9 @@ export function resolveGusProvider(): GusProvider {
 }
 
 function xaiModelForCategory(categoryKey: NonNullable<GenerateInput['categoryKey']>): string {
-  return categoryKey === 'chat' ? env.GUS_XAI_CHAT_MODEL : env.GUS_XAI_NOTIFICATION_MODEL;
+  return categoryKey === 'chat' || categoryKey === 'gus_intro'
+    ? env.GUS_XAI_CHAT_MODEL
+    : env.GUS_XAI_NOTIFICATION_MODEL;
 }
 
 export function configuredModelForCategory(

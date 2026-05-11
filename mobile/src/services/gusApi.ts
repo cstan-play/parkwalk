@@ -5,6 +5,7 @@ import type {
   DogProfileResponse,
   FireNotificationRequest,
   FireNotificationResponse,
+  GusIntroResponse,
   GusModelsResponse,
   GusPrefs,
   GusPrefsResponse,
@@ -48,6 +49,13 @@ export async function upsertGusPrefs(patch: UpsertGusPrefsRequest): Promise<GusP
 export async function fetchChatMessages(): Promise<ChatMessage[]> {
   const { data } = await api.get<ChatMessagesResponse>('/api/v1/gus/messages');
   return data.items;
+}
+
+export async function ensureGusIntro(): Promise<ChatMessage | null> {
+  const { data } = await api.post<GusIntroResponse>('/api/v1/gus/intro', undefined, {
+    timeout: CHAT_TIMEOUT_MS,
+  });
+  return data.message;
 }
 
 export async function sendChat(request: SendChatRequest): Promise<SendChatResponse> {

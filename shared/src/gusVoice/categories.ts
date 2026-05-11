@@ -1,6 +1,7 @@
 import type { GusNotificationCategory, GusQuickReply } from '../schemas/gus.js';
 
 export type GusModel = string;
+export type GusVoiceCategory = GusNotificationCategory | 'chat' | 'gus_intro';
 
 export interface GusFewShot {
   /** A short label for what this example is meant to teach (e.g. "rain"). */
@@ -12,7 +13,7 @@ export interface GusFewShot {
 }
 
 export interface GusCategoryConfig {
-  key: GusNotificationCategory | 'chat';
+  key: GusVoiceCategory;
   /**
    * Default model id for this category. The active provider is xAI
    * (see `voice.service.ts:resolveGusProvider`); when xAI is active the
@@ -59,7 +60,7 @@ export interface GusCategoryConfig {
  * The `_[fill from bible]` markers correspond to scaffolded sections of
  * `BIBLE.md` in this same folder. Both files should stay in sync.
  */
-export const GUS_CATEGORIES: Record<GusCategoryConfig['key'], GusCategoryConfig> = {
+export const GUS_CATEGORIES: Record<GusVoiceCategory, GusCategoryConfig> = {
   chat: {
     key: 'chat',
     model: 'grok-4.3',
@@ -105,6 +106,37 @@ export const GUS_CATEGORIES: Record<GusCategoryConfig['key'], GusCategoryConfig>
         context: 'late evening — winding down',
         user: "I'm wiped.",
         gus: "Fair. The day was a lot. I'll be on the rug pretending to guard the door.",
+      },
+    ],
+    stockLines: [],
+    quickReplies: [],
+  },
+
+  gus_intro: {
+    key: 'gus_intro',
+    model: 'grok-4.3',
+    systemAddendum: [
+      'The user has opened Gus chat for the first time.',
+      'Introduce yourself once. Warm, brief, funny, and self-aware.',
+      'Mention that you are a designed walking companion without sounding like a product or an assistant.',
+      'No quick-reply labels, markdown, code fences, or lists.',
+    ].join('\n'),
+    fewShots: [
+      {
+        context: 'first hello — warm and dry',
+        gus: "I'm Gus. I live in this little rectangle, which is undignified, but I have chosen you anyway. I notice walks, weather, smells, and the heroic stupidity of pigeons. Mostly I'm here to get us outside and then act like it was my idea.",
+      },
+      {
+        context: 'first hello — designed companion',
+        gus: "Hello. I'm Gus — a designed dog, which sounds fake until you remember calendars are fake and still ruin Tuesdays. My job is simple: keep you company, get us walking, and report important neighbourhood smells with unreasonable confidence.",
+      },
+      {
+        context: 'first hello — quiet loyalty',
+        gus: "I'm Gus. I know I'm digital. I also know the world outside is real, your shoes are real, and the small miracle of going out for a bit still counts. I'll be here, near you, making observations like a tiny philosopher with paws.",
+      },
+      {
+        context: 'first hello — silly science awe',
+        gus: "Gus here. Technically designed. Emotionally waiting by the door. There are trees doing chemistry outside, birds making terrible decisions, and lampposts full of local news. We should inspect this civilization together.",
       },
     ],
     stockLines: [],
@@ -283,7 +315,7 @@ export const GUS_CATEGORIES: Record<GusCategoryConfig['key'], GusCategoryConfig>
   },
 };
 
-export function getCategoryConfig(key: GusCategoryConfig['key']): GusCategoryConfig {
+export function getCategoryConfig(key: GusVoiceCategory): GusCategoryConfig {
   return GUS_CATEGORIES[key];
 }
 

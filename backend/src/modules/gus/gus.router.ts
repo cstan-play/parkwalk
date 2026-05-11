@@ -12,6 +12,7 @@ import { asyncHandler } from '../../middleware/asyncHandler.js';
 import { validate } from '../../middleware/validate.js';
 
 import {
+  ensureIntroMessage,
   fireNotificationMessage,
   getOrCreateDogProfile,
   getOrCreateGusPrefs,
@@ -84,6 +85,15 @@ export function buildGusRouter(): Router {
     asyncHandler(async (req, res) => {
       const ownerName = req.user!.displayName ?? req.user!.username;
       const result = await sendUserMessage(req.user!.id, ownerName, req.body.content);
+      res.status(201).json(result);
+    }),
+  );
+
+  router.post(
+    '/intro',
+    asyncHandler(async (req, res) => {
+      const ownerName = req.user!.displayName ?? req.user!.username;
+      const result = await ensureIntroMessage(req.user!.id, ownerName);
       res.status(201).json(result);
     }),
   );

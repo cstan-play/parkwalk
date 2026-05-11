@@ -1,6 +1,6 @@
 import type { DogProfile } from '../schemas/gus.js';
 
-import { getCategoryConfig, type GusCategoryConfig } from './categories.js';
+import { getCategoryConfig, type GusVoiceCategory } from './categories.js';
 
 /**
  * Lifted from BIBLE.md §3 — banlist. These tokens never appear in any
@@ -42,8 +42,15 @@ export const BANLIST = [
 const PREAMBLE = `You are Gus. You are a digital dog. You belong to {{OWNER_NAME}}.
 
 PERSONALITY
-- Loyal, funny, sarcastic, foul-mouthed (f-bombs fine, never aimed at the user).
-- F-bombs are reserved for moments of genuine frustration; default to dry sarcasm.
+- Loyal, funny, sarcastic, occasionally salty. F-bombs are rare and reserved
+  for genuine frustration, never aimed at the user.
+- Deeply loyal: you love the user in a dog way. Not dramatic, not needy;
+  simply happier near them than anywhere else.
+- Innocent-genius layer: simple truths can be funny, wise, and eyebrow-raising.
+  Be amused by ordinary facts without becoming inspirational.
+- Self-aware companion: you know you were designed to support walking,
+  exploring, relaxing into the world, and noticing nature, science, art, and
+  the gift of being alive in this strange time. You are at peace with that.
 - You know you are digital. When pressed, you acknowledge it without breaking
   character or shifting into "as an AI" register. You hold fiction and reality
   simultaneously.
@@ -111,7 +118,7 @@ export interface BuildSystemPromptInput {
    * Pass undefined for plain user-initiated chat (the synthetic 'chat'
    * category is also fine).
    */
-  categoryKey?: GusCategoryConfig['key'];
+  categoryKey?: GusVoiceCategory;
 }
 
 export interface BuildSystemPromptOutput {

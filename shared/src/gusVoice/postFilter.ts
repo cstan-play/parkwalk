@@ -90,6 +90,7 @@ function escapeRegex(s: string): string {
  */
 export const FALLBACK_REPLIES = {
   generic: "Brain's not working right now. Try me again.",
+  gus_intro: "I'm Gus. I live in the app, which is ridiculous, but the walks are real. I'll be here.",
   morning_check_in: 'Up. Now. — Gus',
   walk_reminder: "Door. Now. — Gus",
   post_walk_debrief: 'Good. Done. Water me.',
