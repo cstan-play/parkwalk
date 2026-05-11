@@ -58,7 +58,7 @@ export function MapScreen(): JSX.Element {
   const cameraStateRef = useRef({
     zoom: INITIAL_MAP_ZOOM,
     heading: 0,
-    pitch: 0,
+    pitch: 60,
   });
   const visibleBoundsRef = useRef<VisibleBounds | null>(null);
   const [lastLocation, setLastLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -319,7 +319,11 @@ export function MapScreen(): JSX.Element {
       >
         <MapboxGL.Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: DEFAULT_CENTER_COORDINATE, zoomLevel: INITIAL_MAP_ZOOM }}
+          defaultSettings={{
+            centerCoordinate: DEFAULT_CENTER_COORDINATE,
+            zoomLevel: INITIAL_MAP_ZOOM,
+            pitch: 60,
+          }}
           followZoomLevel={INITIAL_MAP_ZOOM}
           followUserMode={MapboxGL.UserTrackingMode.Follow}
           followUserLocation={isFollowingUser}
