@@ -397,10 +397,11 @@ export function MapScreen(): JSX.Element {
 
     pendingRef.current.add(bestEntity.id);
     collectMutation.mutate(bestEntity);
-    // collectable / movement / nearbyQuery are stable references for an
-    // effect tick; lint-allowing the trimmed dep array keeps the effect
-    // from re-running on every render due to function identity churn.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps trimmed deliberately: `collectable`, `collectMutation`, and other
+    // closures are re-created every render. Including them would re-run this
+    // effect every tick. The listed deps cover every state transition that
+    // should retrigger the drain (walk state, collected count, in-flight
+    // collect, live GPS, nearby snapshot).
   }, [
     activeWalk?.status,
     activeWalk?.collectedEntityIds.length,

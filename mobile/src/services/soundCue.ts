@@ -9,7 +9,7 @@
  * royalty-free ~100ms cue (in place, same filename) to enable audible
  * playback. No code changes needed.
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const Sound = require('react-native-sound');
 
 // Disable mix-with-others on iOS so the cue doesn't fight Apple Music etc.
@@ -36,7 +36,7 @@ function ensurePreloaded(): void {
   if (preloadAttempted) return;
   preloadAttempted = true;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const asset = require('../assets/sounds/smell-found.wav');
     preloaded = new Sound(asset, (error: unknown) => {
       if (error) {
