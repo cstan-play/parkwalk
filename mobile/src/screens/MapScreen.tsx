@@ -5,10 +5,20 @@ import MapboxGL, { type Camera as MapboxCamera, type MapState } from '@rnmapbox/
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Position } from 'geojson';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  AppState,
+  type AppStateStatus,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Config from 'react-native-config';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
 import { CompanionLayer } from '@/components/CompanionLayer';
+import { SmellToast } from '@/components/ui/SmellToast';
 import { PARKWALK_MAP_STYLE_URL } from '@/config/mapStyle';
 import { useCompanion } from '@/hooks/useCompanion';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
@@ -18,6 +28,7 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { schedulePostWalkDebrief } from '@/notifications/scheduler';
 import { onRetry } from '@/services/apiClient';
 import { collectEntity, fetchNearby } from '@/services/entitiesApi';
+import { playSmellFound } from '@/services/soundCue';
 import {
   getMovingDurationSeconds,
   getPausedDurationSeconds,
@@ -26,6 +37,14 @@ import {
   type SmellCollection,
 } from '@/stores/walkSessionStore';
 import { haversineMeters } from '@/util/geo';
+
+const COLLECT_COOLDOWN_MS = 4_000;
+// `impactLight` on Android is a sub-perceptible ~10 ms tick on most hardware;
+// `impactMedium` maps to EFFECT_HEAVY_CLICK and is reliably felt. We also
+// ignore the Android system haptic setting because the collect haptic is an
+// explicit user-action signal, not ambient feedback.
+const HAPTIC_TYPE = 'impactMedium' as const;
+const HAPTIC_OPTIONS = { enableVibrateFallback: true, ignoreAndroidSystemSettings: true };
 
 // Mirrors `MAX_ACCURACY_TOLERANCE_M` on the backend. Cap applied to the user's
 // reported horizontal accuracy before subtracting it from the measured
@@ -68,6 +87,17 @@ export function MapScreen(): JSX.Element {
   const [showRecenterButton, setShowRecenterButton] = useState(false);
   const [fieldDiagnosticsExpanded, setFieldDiagnosticsExpanded] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Auto-collect bookkeeping. pendingRef holds entity ids whose mutation is
+  // in flight; cooldownRef holds entity ids -> unblock epoch (post-failure).
+  // Both are refs (not state) so updating them never re-runs the effect on
+  // its own — only the GPS/state dep changes do. The effect re-runs on every
+  // movement sample and consults these to avoid double-firing.
+  const pendingRef = useRef<Set<string>>(new Set());
+  const cooldownRef = useRef<Map<string, number>>(new Map());
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const smellPulse = useRef(new Animated.Value(1)).current;
   const idem = useIdempotencyKey();
   const queryClient = useQueryClient();
   const activeWalk = useWalkSessionStore((s) => s.activeSession);
@@ -113,6 +143,13 @@ export function MapScreen(): JSX.Element {
   useEffect(() => {
     if (recoveryPromptPending) setFieldDiagnosticsExpanded(false);
   }, [recoveryPromptPending]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
+  }, []);
 
   const centerCoords = useMemo(() => {
     if (movement.latest) {
@@ -228,20 +265,53 @@ export function MapScreen(): JSX.Element {
       });
     },
     onSuccess: (_data, entity) => {
+      pendingRef.current.delete(entity.id);
       setCollectUi({ kind: 'idle' });
       const smellMeta = extractSmellMeta(entity);
       void markCollected(entity.id, smellMeta);
       const points = Number((entity.config as { points?: number }).points ?? 0);
-      Alert.alert('Collected!', `+${points} points`);
+      const label = smellMeta?.name ?? 'Mystery smell';
+      setToastMessage(`Smell found: ${label} +${points}`);
+      playSmellFound();
+      try {
+        ReactNativeHapticFeedback.trigger(HAPTIC_TYPE, HAPTIC_OPTIONS);
+      } catch {
+        // Haptic is best-effort; never block the collect on it.
+      }
       void queryClient.invalidateQueries({ queryKey: ['nearby'] });
       void queryClient.invalidateQueries({ queryKey: ['myStats'] });
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, entity) => {
+      pendingRef.current.delete(entity.id);
+      cooldownRef.current.set(entity.id, Date.now() + COLLECT_COOLDOWN_MS);
       setCollectUi({ kind: 'idle' });
       const category = categorizeError(err);
-      Alert.alert(category.title, category.message);
+      // Stay quiet on transient infra errors — the cooldown will retry.
+      // Surface only when the failure is user-relevant (out of range,
+      // movement validation, walk gating).
+      if (category.surface === 'show') {
+        setToastMessage(category.title);
+      }
     },
   });
+
+  // +1 bump on the smells metric when a new collect lands.
+  const smellCount = activeWalk?.collectedEntityIds.length ?? 0;
+  useEffect(() => {
+    if (smellCount === 0) return;
+    Animated.sequence([
+      Animated.timing(smellPulse, {
+        toValue: 1.3,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(smellPulse, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [smellCount, smellPulse]);
 
   // Live GPS fix fed into distance math below. We intentionally do NOT use
   // `entity.distanceMeters` from the nearby query — that value is cached
@@ -284,6 +354,60 @@ export function MapScreen(): JSX.Element {
   }, [livePoint, nearbyQuery.data]);
 
   const isCollectInFlight = collectUi.kind !== 'idle';
+
+  /**
+   * Auto-collect drain effect.
+   *
+   * Runs on every movement/state change. Picks the closest still-viable
+   * candidate (collectable, not already in this walk, not in pendingRef,
+   * not in active cooldown) and fires a collect. Concurrency is limited
+   * to 1 by the collectUi.kind === 'idle' guard — the next candidate is
+   * only considered after the in-flight mutation resolves.
+   *
+   * Net behavior in a cluster: serial collects, one round-trip each.
+   * Stops naturally when no candidate remains.
+   */
+  useEffect(() => {
+    if (!activeWalk || activeWalk.status !== 'active') return;
+    if (collectUi.kind !== 'idle') return;
+    if (appStateRef.current !== 'active') return;
+    if (!livePoint) return;
+
+    const candidates = (nearbyQuery.data ?? [])
+      .filter((entity) => !activeWalk.collectedEntityIds.includes(entity.id))
+      .filter((entity) => !pendingRef.current.has(entity.id))
+      .filter((entity) => {
+        const unblockAt = cooldownRef.current.get(entity.id);
+        return unblockAt === undefined || Date.now() >= unblockAt;
+      })
+      .filter((entity) => collectable(entity));
+
+    if (candidates.length === 0) return;
+
+    let bestEntity: GameEntity | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const entity of candidates) {
+      const d = haversineMeters(livePoint, entity.location);
+      if (d < bestDistance) {
+        bestDistance = d;
+        bestEntity = entity;
+      }
+    }
+    if (!bestEntity) return;
+
+    pendingRef.current.add(bestEntity.id);
+    collectMutation.mutate(bestEntity);
+    // collectable / movement / nearbyQuery are stable references for an
+    // effect tick; lint-allowing the trimmed dep array keeps the effect
+    // from re-running on every render due to function identity churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeWalk?.status,
+    activeWalk?.collectedEntityIds.length,
+    collectUi.kind,
+    livePoint,
+    nearbyQuery.data,
+  ]);
   const nowIso = useMemo(() => new Date(nowTick).toISOString(), [nowTick]);
   const movingSeconds = activeWalk ? getMovingDurationSeconds(activeWalk, nowIso) : 0;
   const pausedSeconds = activeWalk ? getPausedDurationSeconds(activeWalk.pauseIntervals, nowIso) : 0;
@@ -366,35 +490,17 @@ export function MapScreen(): JSX.Element {
           sprite={companion.sprite}
         />
         {(nearbyQuery.data ?? []).map((e) => {
-          const dimmed =
+          const isInFlight =
             isCollectInFlight && 'entityId' in collectUi && collectUi.entityId === e.id;
+          const alreadyCollected = activeWalk?.collectedEntityIds.includes(e.id) ?? false;
+          const dimmed = isInFlight || alreadyCollected;
+          // Markers are passive in Phase 7 — collection is driven by the
+          // proximity-based effect above, not by taps.
           return (
             <MapboxGL.PointAnnotation
               key={e.id}
               id={e.id}
               coordinate={[e.location.longitude, e.location.latitude]}
-              onSelected={() => {
-                if (isCollectInFlight) return;
-                if (!activeWalk) {
-                  Alert.alert('Start a walk', 'Start a walk to collect nearby items.');
-                  return;
-                }
-                if (activeWalk.status === 'paused') {
-                  Alert.alert('Walk paused', 'Resume your walk to collect nearby items.');
-                  return;
-                }
-                if (!collectable(e)) {
-                  const d = liveDistanceTo(e);
-                  Alert.alert(
-                    'Too far',
-                    d === null
-                      ? 'Waiting for a GPS fix. Try again in a second.'
-                      : `You're ${Math.round(d)}m away (±${Math.round(liveAccuracyM)}m); need to be within ${e.collectionRadiusMeters}m.`,
-                  );
-                  return;
-                }
-                collectMutation.mutate(e);
-              }}
             >
               <View style={[styles.marker, dimmed && styles.markerDimmed]} />
             </MapboxGL.PointAnnotation>
@@ -406,6 +512,9 @@ export function MapScreen(): JSX.Element {
           <Metric label="moving" value={formatDuration(movingSeconds)} />
           <Metric label="distance" value={`${Math.round(activeWalk?.distanceMeters ?? 0)}m`} />
           <Metric label="steps" value={`${activeWalk?.stepCount ?? 0}`} />
+          <Animated.View style={{ transform: [{ scale: smellPulse }] }}>
+            <Metric label="smells" value={`${smellCount}`} />
+          </Animated.View>
         </View>
         {activeWalk && pausedSeconds > 0 ? (
           <Text style={styles.pausedText}>Paused {formatDuration(pausedSeconds)}</Text>
@@ -556,6 +665,7 @@ export function MapScreen(): JSX.Element {
           </Pressable>
         )
       ) : null}
+      <SmellToast message={toastMessage} onHidden={() => setToastMessage(null)} />
     </View>
   );
 }
@@ -662,52 +772,70 @@ interface AxiosLikeError {
   code?: string;
 }
 
-function categorizeError(err: unknown): { title: string; message: string } {
+/**
+ * `surface` is 'show' only for failures the user can act on (out of range,
+ * movement validation, walk gating). Transient infra errors return 'silent'
+ * — the cooldown handles the retry without bothering the user.
+ */
+function categorizeError(err: unknown): {
+  title: string;
+  message: string;
+  surface: 'show' | 'silent';
+} {
   const e = (typeof err === 'object' && err !== null ? err : {}) as AxiosLikeError;
   const status = e.response?.status;
   const serverCode = e.response?.data?.error?.code;
   const serverMessage = e.response?.data?.error?.message;
 
   if (serverCode === 'OUT_OF_RANGE' || serverCode === 'DISTANCE_TOO_FAR') {
-    return { title: 'Too far', message: serverMessage ?? 'Walk closer and try again.' };
-  }
-  if (serverCode === 'ALREADY_COLLECTED') {
     return {
-      title: 'Already collected',
-      message: serverMessage ?? "You've already collected this.",
+      title: 'Too far',
+      message: serverMessage ?? 'Walk closer and try again.',
+      surface: 'show',
     };
   }
   if (serverCode === 'MOVEMENT_INVALID') {
     return {
       title: 'Movement not accepted',
       message: serverMessage ?? 'The server rejected this walk as not on foot.',
+      surface: 'show',
+    };
+  }
+  if (serverCode === 'ALREADY_COLLECTED') {
+    return {
+      title: 'Already collected',
+      message: serverMessage ?? "You've already collected this.",
+      surface: 'silent',
     };
   }
   if (serverCode === 'WALK_REQUIRED') {
     return {
       title: 'Start a walk',
       message: serverMessage ?? 'Start a walk to collect nearby items.',
+      surface: 'silent',
     };
   }
   if (status === 429) {
-    return { title: 'Slow down', message: 'Too many collect attempts. Wait a moment.' };
-  }
-  if (err instanceof Error && !e.response) {
     return {
-      title: 'Cannot collect',
-      message: err.message,
+      title: 'Slow down',
+      message: 'Too many collect attempts. Wait a moment.',
+      surface: 'silent',
     };
   }
-  // No response at all = ran out of retries, still couldn't reach server.
+  if (err instanceof Error && !e.response) {
+    return { title: 'Cannot collect', message: err.message, surface: 'silent' };
+  }
   if (!e.response) {
     return {
       title: 'Network trouble',
       message: 'Could not reach the server after retrying. Check wifi/cellular and try again.',
+      surface: 'silent',
     };
   }
   return {
     title: 'Cannot collect',
     message: serverMessage ?? e.message ?? 'Unknown error',
+    surface: 'silent',
   };
 }
 

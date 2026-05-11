@@ -169,6 +169,18 @@ function buildSmellsSummary(
 ): DescribeWalkSmellsOutput | null {
   const byType = readByType(walk);
   if (!byType) return null;
+  const total = Object.values(byType).reduce((sum, count) => sum + (count ?? 0), 0);
+  const collected = getCollectedCount(walk);
+  // Legacy collectibles (seeded before the smellType field was added) come
+  // through with no `smellType` in their config, so `byType` ends up empty
+  // even when the user collected several. Surface a short "couldn't classify"
+  // line instead of the generic empty headline.
+  if (total === 0 && collected > 0) {
+    return {
+      headline: `${collected} find${collected === 1 ? '' : 's'}, no breakdown yet.`,
+      lines: ['Older markers — collect a freshly seeded one and the details show up here.'],
+    };
+  }
   return describeWalkSmells({
     byType,
     weather: readWeather(walk),

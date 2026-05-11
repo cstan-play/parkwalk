@@ -1095,12 +1095,21 @@ PODS:
     - React-Core
   - RNPermissions (4.1.5):
     - React-Core
+  - RNReactNativeHapticFeedback (3.0.0):
+    - glog
+    - RCT-Folly (= 2022.05.16.00)
+    - React-Core
   - RNScreens (3.31.1):
     - glog
     - RCT-Folly (= 2022.05.16.00)
     - React-Core
     - React-RCTImage
   - RNSensors (7.3.6):
+    - React-Core
+  - RNSound (0.11.2):
+    - React-Core
+    - RNSound/Core (= 0.11.2)
+  - RNSound/Core (0.11.2):
     - React-Core
   - SocketRocket (0.6.1)
   - Turf (4.0.0)
@@ -1166,8 +1175,10 @@ DEPENDENCIES:
   - "rnmapbox-maps (from `../node_modules/@rnmapbox/maps`)"
   - "RNNotifee (from `../../node_modules/@notifee/react-native`)"
   - RNPermissions (from `../../node_modules/react-native-permissions`)
+  - RNReactNativeHapticFeedback (from `../../node_modules/react-native-haptic-feedback`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSensors (from `../../node_modules/react-native-sensors`)
+  - RNSound (from `../node_modules/react-native-sound`)
   - Yoga (from `../../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -1294,10 +1305,14 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@notifee/react-native"
   RNPermissions:
     :path: "../../node_modules/react-native-permissions"
+  RNReactNativeHapticFeedback:
+    :path: "../../node_modules/react-native-haptic-feedback"
   RNScreens:
     :path: "../node_modules/react-native-screens"
   RNSensors:
     :path: "../../node_modules/react-native-sensors"
+  RNSound:
+    :path: "../node_modules/react-native-sound"
   Yoga:
     :path: "../../node_modules/react-native/ReactCommon/yoga"
 
@@ -1363,8 +1378,10 @@ SPEC CHECKSUMS:
   rnmapbox-maps: fef23f640e75c1980df1e9c9158250dd457d830c
   RNNotifee: 5e3b271e8ea7456a36eec994085543c9adca9168
   RNPermissions: 11c81af4029742442db3c8458a7274a5a3146f17
+  RNReactNativeHapticFeedback: 6bf74a8eda0776a9923cb1c4ee1d34b39ade2a67
   RNScreens: 321d9067091167f6255474ea0567f4b4ac09958a
   RNSensors: 111159597ac51505df10413c61b28bcd28e88983
+  RNSound: 314cc5226453ef4a3314a196c65e8a65e5106a7b
   SocketRocket: f32cd54efbe0f095c4d7594881e52619cfe80b17
   Turf: c9eb11a65d96af58cac523460fd40fec5061b081
   Yoga: a813a6d82538ccba91c54406404e3ed80b48a692
