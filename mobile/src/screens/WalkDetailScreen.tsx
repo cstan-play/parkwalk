@@ -25,6 +25,7 @@ export function WalkDetailScreen(): JSX.Element {
       (walk) => walk.clientId === route.params.clientId || walk.serverId === route.params.walkId,
     ),
   );
+  const lastKnownLocation = useWalkSessionStore((s) => s.lastKnownLocation);
   const remote = useQuery({
     queryKey: ['walk', route.params.walkId],
     queryFn: () => fetchWalk(route.params.walkId),
@@ -49,14 +50,24 @@ export function WalkDetailScreen(): JSX.Element {
         : null,
     [coordinates],
   );
-  const center = useMemo<Position>(
-    () => coordinates[0]?.[0] ?? ([-122.4194, 37.7749] as Position),
-    [coordinates],
-  );
-  const centerKey = `${center[0]},${center[1]}`;
+  // Resolution ladder: real route first; then the captured start fix on a
+  // local walk; then the latest GPS we've seen anywhere. If none resolve we
+  // intentionally render an empty-state instead of showing a placeholder
+  // somewhere on the planet.
+  const center = useMemo<Position | null>(() => {
+    if (coordinates[0]?.[0]) return coordinates[0][0]!;
+    if (walk && 'startLocation' in walk && walk.startLocation) {
+      return [walk.startLocation.longitude, walk.startLocation.latitude];
+    }
+    if (lastKnownLocation) {
+      return [lastKnownLocation.longitude, lastKnownLocation.latitude];
+    }
+    return null;
+  }, [coordinates, walk, lastKnownLocation]);
+  const centerKey = center ? `${center[0]},${center[1]}` : null;
 
   useEffect(() => {
-    if (!mapLoaded || !walk) return;
+    if (!mapLoaded || !walk || !center) return;
     cameraRef.current?.setCamera({
       centerCoordinate: center,
       zoomLevel: DETAIL_ROUTE_ZOOM,
@@ -84,32 +95,38 @@ export function WalkDetailScreen(): JSX.Element {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.mapBox}>
-        <MapboxGL.MapView
-          style={styles.map}
-          styleURL={PARKWALK_MAP_STYLE_URL}
-          logoEnabled={false}
-          attributionEnabled={false}
-          onDidFinishLoadingMap={() => setMapLoaded(true)}
-        >
-          <MapboxGL.Camera
-            ref={cameraRef}
-            defaultSettings={{ centerCoordinate: center, zoomLevel: DETAIL_OVERVIEW_ZOOM }}
-          />
-          {shape ? (
-            <MapboxGL.ShapeSource id="walk-detail-route" shape={shape}>
-              <MapboxGL.LineLayer
-                id="walk-detail-route-line"
-                style={{
-                  lineColor: '#0EA5E9',
-                  lineWidth: 5,
-                  lineOpacity: 0.85,
-                  lineCap: 'round',
-                  lineJoin: 'round',
-                }}
-              />
-            </MapboxGL.ShapeSource>
-          ) : null}
-        </MapboxGL.MapView>
+        {center ? (
+          <MapboxGL.MapView
+            style={styles.map}
+            styleURL={PARKWALK_MAP_STYLE_URL}
+            logoEnabled={false}
+            attributionEnabled={false}
+            onDidFinishLoadingMap={() => setMapLoaded(true)}
+          >
+            <MapboxGL.Camera
+              ref={cameraRef}
+              defaultSettings={{ centerCoordinate: center, zoomLevel: DETAIL_OVERVIEW_ZOOM }}
+            />
+            {shape ? (
+              <MapboxGL.ShapeSource id="walk-detail-route" shape={shape}>
+                <MapboxGL.LineLayer
+                  id="walk-detail-route-line"
+                  style={{
+                    lineColor: '#0EA5E9',
+                    lineWidth: 5,
+                    lineOpacity: 0.85,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                />
+              </MapboxGL.ShapeSource>
+            ) : null}
+          </MapboxGL.MapView>
+        ) : (
+          <View style={styles.mapEmpty}>
+            <Text style={styles.mapEmptyText}>Walk too short to map</Text>
+          </View>
+        )}
       </View>
       <View style={styles.statsGrid}>
         <Stat label="Distance" value={formatDistance(walk.distanceMeters)} />
@@ -160,6 +177,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
   },
   map: { flex: 1 },
+  mapEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  mapEmptyText: { color: '#6B7280', fontSize: 14, fontWeight: '600' },
   statsGrid: {
     marginTop: 12,
     flexDirection: 'row',

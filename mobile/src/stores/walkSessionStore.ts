@@ -43,6 +43,11 @@ export interface LocalWalkPathSegment {
   points: WalkPathPoint[];
 }
 
+export interface SimpleLocation {
+  latitude: number;
+  longitude: number;
+}
+
 export interface LocalWalkSession {
   clientId: string;
   status: ActiveWalkStatus | CompletedWalkStatus;
@@ -65,12 +70,19 @@ export interface LocalWalkSession {
   autoFinished?: boolean;
   autoFinishReason?: string | null;
   usesNativeSteps?: boolean;
+  /** Captured at startWalk() from `initialLocation`; used as a fallback for
+   *  the detail map center when the walk has no GPS samples. */
+  startLocation?: SimpleLocation;
 }
 
 interface PersistedState {
   ownerId: string | null;
   activeSession: LocalWalkSession | null;
   completedSessions: LocalWalkSession[];
+  /** Latest GPS fix seen by any active walk's `recordMovementSample`. Persisted
+   *  so it survives restart and remains a last-resort center for the detail
+   *  map of walks too short to have their own GPS samples. */
+  lastKnownLocation?: SimpleLocation;
 }
 
 interface WalkSessionState extends PersistedState {
@@ -100,6 +112,7 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
   completedSessions: [],
   hydrated: false,
   recoveryPromptPending: false,
+  lastKnownLocation: undefined,
 
   hydrate: async (ownerId = null) => {
     const normalizedOwnerId = ownerId ?? null;
@@ -116,6 +129,7 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
           completedSessions: parsed.completedSessions ?? [],
           hydrated: true,
           recoveryPromptPending: !!activeSession,
+          lastKnownLocation: parsed.lastKnownLocation,
         });
         return;
       }
@@ -128,6 +142,7 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       completedSessions: [],
       hydrated: true,
       recoveryPromptPending: false,
+      lastKnownLocation: undefined,
     });
   },
 
@@ -137,6 +152,9 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
     if (get().activeSession) return;
     const now = new Date().toISOString();
     const initialPoint = initialLocation ? toPathPoint(initialLocation, now, 0) : null;
+    const startLocation: SimpleLocation | undefined = initialLocation
+      ? { latitude: initialLocation.latitude, longitude: initialLocation.longitude }
+      : undefined;
     const activeSession: LocalWalkSession = {
       clientId: createUuid(),
       status: 'active',
@@ -154,8 +172,13 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
       syncState: 'pending',
       autoFinished: false,
       autoFinishReason: null,
+      startLocation,
     };
-    set({ activeSession, recoveryPromptPending: false });
+    set({
+      activeSession,
+      recoveryPromptPending: false,
+      lastKnownLocation: startLocation ?? get().lastKnownLocation,
+    });
     await persist(get());
   },
 
@@ -204,6 +227,9 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
         currentStepIntervalStartedAt: now,
         currentNativeIntervalSteps: 0,
       },
+      lastKnownLocation: initialLocation
+        ? { latitude: initialLocation.latitude, longitude: initialLocation.longitude }
+        : get().lastKnownLocation,
     });
     await persist(get());
   },
@@ -280,6 +306,10 @@ export const useWalkSessionStore = create<WalkSessionState>((set, get) => ({
         distanceMeters: session.distanceMeters + segmentMeters,
         stepCount: nextStepCount,
         lastMovementAt,
+      },
+      lastKnownLocation: {
+        latitude: sample.location.latitude,
+        longitude: sample.location.longitude,
       },
     });
     schedulePersist(get);
@@ -534,6 +564,7 @@ async function persist(state: PersistedState): Promise<void> {
     ownerId: state.ownerId,
     activeSession: state.activeSession,
     completedSessions: state.completedSessions,
+    lastKnownLocation: state.lastKnownLocation,
   };
   await AsyncStorage.setItem(storageKeyForOwner(state.ownerId), JSON.stringify(payload));
 }
@@ -657,5 +688,6 @@ export function __resetWalkSessionStoreForTests(): void {
     completedSessions: [],
     hydrated: false,
     recoveryPromptPending: false,
+    lastKnownLocation: undefined,
   });
 }
