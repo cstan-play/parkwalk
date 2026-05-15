@@ -12,6 +12,7 @@ import {
   useWalkSessionStore,
   type LocalWalkSession,
 } from '@/stores/walkSessionStore';
+import { fonts } from '@/theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'WalkHistory'>;
 
@@ -38,6 +39,12 @@ export function WalkHistoryScreen(): JSX.Element {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.title}>Walks</Text>
+            <Text style={styles.subtitle}>Loops, discoveries, and all the little trail receipts.</Text>
+          </View>
+        }
         contentContainerStyle={rows.length === 0 ? styles.emptyList : styles.list}
         ListEmptyComponent={
           <Text style={styles.emptyText}>Recorded walks will appear here after your first walk.</Text>
@@ -105,31 +112,44 @@ function formatDuration(seconds: number): string {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
-  list: { padding: 12 },
+  container: { flex: 1, backgroundColor: '#F4ECE1' },
+  list: { padding: 18, paddingBottom: 32 },
   emptyList: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  emptyText: { color: '#6B7280', textAlign: 'center', fontSize: 16 },
+  header: {
+    marginBottom: 18,
+  },
+  title: { color: '#000', fontSize: 34, lineHeight: 40, fontFamily: fonts.serif },
+  subtitle: { marginTop: 6, color: '#5A5148', fontSize: 16, lineHeight: 22 },
+  emptyText: { color: '#5A5148', textAlign: 'center', fontSize: 16, lineHeight: 22 },
   row: {
     minHeight: 74,
-    borderRadius: 8,
-    backgroundColor: 'white',
-    padding: 14,
+    borderRadius: 19,
+    backgroundColor: '#F7EFE5',
+    padding: 16,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
   },
   rowPressed: { opacity: 0.72 },
-  rowTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  rowMeta: { marginTop: 4, color: '#4B5563' },
+  rowTitle: { fontSize: 17, lineHeight: 22, fontWeight: '800', color: '#000' },
+  rowMeta: { marginTop: 4, color: '#5A5148', lineHeight: 20 },
   syncColumn: {
     alignItems: 'flex-end',
     flexShrink: 1,
     marginLeft: 12,
   },
-  syncState: { color: '#6B7280', fontSize: 12 },
+  syncState: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: '#F0E4D4',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    color: '#6B3F24',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   syncError: {
     marginTop: 4,
     color: '#B91C1C',

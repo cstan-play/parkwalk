@@ -10,6 +10,7 @@ import { PARKWALK_MAP_STYLE_URL } from '@/config/mapStyle';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { fetchWalk } from '@/services/walksApi';
 import { useWalkSessionStore, type LocalWalkSession } from '@/stores/walkSessionStore';
+import { colors, fonts } from '@/theme';
 import {
   describeWalkSmells,
   type DescribeWalkSmellsOutput,
@@ -108,9 +109,26 @@ export function WalkDetailScreen(): JSX.Element {
       ? walk.pausedDurationSeconds
       : 0;
   const movingSeconds = Math.max(0, durationSeconds - pausedSeconds);
+  const smellCount = getCollectedCount(walk);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.header}>
+        <Text style={styles.kicker}>Walk with Gus</Text>
+        <Text style={styles.title}>Walk report</Text>
+        <Text style={styles.subtitle}>{formatWalkDate(walk.startedAt)}</Text>
+      </View>
+      <View style={styles.heroStats}>
+        <View style={styles.heroStat}>
+          <Text style={styles.heroValue}>{formatDistance(walk.distanceMeters)}</Text>
+          <Text style={styles.heroLabel}>Distance</Text>
+        </View>
+        <View style={styles.heroDivider} />
+        <View style={styles.heroStat}>
+          <Text style={styles.heroValue}>{smellCount}</Text>
+          <Text style={styles.heroLabel}>New smells</Text>
+        </View>
+      </View>
       <View style={styles.mapBox}>
         {center ? (
           <MapboxGL.MapView
@@ -129,9 +147,9 @@ export function WalkDetailScreen(): JSX.Element {
                 <MapboxGL.LineLayer
                   id="walk-detail-route-line"
                   style={{
-                    lineColor: '#0EA5E9',
-                    lineWidth: 5,
-                    lineOpacity: 0.85,
+                    lineColor: '#BC8F65',
+                    lineWidth: 6,
+                    lineOpacity: 0.9,
                     lineCap: 'round',
                     lineJoin: 'round',
                   }}
@@ -151,7 +169,7 @@ export function WalkDetailScreen(): JSX.Element {
         <Stat label="Moving" value={formatDuration(movingSeconds)} />
         <Stat label="Paused" value={formatDuration(pausedSeconds)} />
         <Stat label="Total" value={formatDuration(durationSeconds)} />
-        <Stat label="New smells found" value={`${getCollectedCount(walk)}`} />
+        <Stat label="Smells" value={`${smellCount}`} />
       </View>
       {smellsSummary ? <SmellsSummary summary={smellsSummary} /> : null}
     </ScrollView>
@@ -266,16 +284,100 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, '0')}`;
 }
 
+function formatWalkDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Recent walk';
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
-  content: { padding: 12 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  emptyText: { color: '#6B7280', textAlign: 'center', fontSize: 16 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 18, paddingBottom: 34 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  emptyText: { color: '#5A1C01', textAlign: 'center', fontSize: 16, fontWeight: '700' },
+  header: {
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  kicker: {
+    color: '#5A1C01',
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0,
+  },
+  title: {
+    marginTop: 8,
+    color: '#000',
+    fontFamily: fonts.serif,
+    fontSize: 40,
+    lineHeight: 45,
+    textAlign: 'center',
+  },
+  subtitle: {
+    marginTop: 6,
+    color: '#3C3C3C',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  heroStats: {
+    minHeight: 104,
+    borderRadius: 28,
+    backgroundColor: '#F7EFE5',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 22,
+    marginBottom: 16,
+    shadowColor: '#6A3E1B',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
+  },
+  heroStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  heroDivider: {
+    width: 1,
+    height: 58,
+    backgroundColor: '#D9C2AA',
+    marginHorizontal: 12,
+  },
+  heroValue: {
+    color: '#5A1C01',
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '900',
+  },
+  heroLabel: {
+    marginTop: 4,
+    color: '#4A3628',
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   mapBox: {
-    height: 320,
-    borderRadius: 8,
+    height: 310,
+    borderRadius: 28,
     overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E9DCCA',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   map: { flex: 1 },
   mapEmpty: {
@@ -284,43 +386,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  mapEmptyText: { color: '#6B7280', fontSize: 14, fontWeight: '600' },
+  mapEmptyText: { color: '#5A1C01', fontSize: 15, fontWeight: '800' },
   statsGrid: {
-    marginTop: 12,
+    marginTop: 16,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   stat: {
-    width: '48%',
-    minHeight: 78,
-    borderRadius: 8,
-    backgroundColor: 'white',
+    // 3-column grid under the map. With `gap: 12` on the parent and
+    // 18px ScrollView side padding, three 31%-wide cells fit cleanly on
+    // a standard phone (≥ 358pt content width). On very narrow devices
+    // they wrap to 2-per-row gracefully thanks to `flexWrap`.
+    width: '31%',
+    minHeight: 88,
+    borderRadius: 20,
+    backgroundColor: '#F7EFE5',
     padding: 12,
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
   },
-  statValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  statLabel: { marginTop: 3, color: '#6B7280', fontSize: 12, textTransform: 'uppercase' },
+  statValue: { fontSize: 20, fontWeight: '900', color: '#5A1C01' },
+  statLabel: {
+    marginTop: 4,
+    color: '#4A3628',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   smellsBlock: {
-    marginTop: 14,
-    padding: 14,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
+    marginTop: 16,
+    padding: 18,
+    backgroundColor: '#F7EFE5',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
   },
   smellsHeadline: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 8,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+    color: '#5A1C01',
+    marginBottom: 10,
   },
   smellLine: {
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 20,
-    marginTop: 4,
+    fontSize: 15,
+    color: '#2F241D',
+    lineHeight: 22,
+    marginTop: 6,
   },
 });

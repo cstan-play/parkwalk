@@ -6,8 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Position } from 'geojson';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   AppState,
+  Image,
   type AppStateStatus,
   Pressable,
   StyleSheet,
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import Config from 'react-native-config';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompanionLayer } from '@/components/CompanionLayer';
 import { SmellToast } from '@/components/ui/SmellToast';
@@ -30,7 +31,6 @@ import { onRetry } from '@/services/apiClient';
 import { collectEntity, fetchNearby } from '@/services/entitiesApi';
 import { playSmellFound } from '@/services/soundCue';
 import {
-  getMovingDurationSeconds,
   getPausedDurationSeconds,
   useWalkSessionStore,
   type LocalWalkSession,
@@ -70,6 +70,7 @@ type CollectUiState =
     };
 
 export function MapScreen(): JSX.Element {
+  const insets = useSafeAreaInsets();
   const movement = useMovementDetection();
   useWalkSession(movement);
   const navigation = useNavigation<Nav>();
@@ -97,7 +98,6 @@ export function MapScreen(): JSX.Element {
   const pendingRef = useRef<Set<string>>(new Set());
   const cooldownRef = useRef<Map<string, number>>(new Map());
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const smellPulse = useRef(new Animated.Value(1)).current;
   const idem = useIdempotencyKey();
   const queryClient = useQueryClient();
   const activeWalk = useWalkSessionStore((s) => s.activeSession);
@@ -271,7 +271,7 @@ export function MapScreen(): JSX.Element {
       void markCollected(entity.id, smellMeta);
       const points = Number((entity.config as { points?: number }).points ?? 0);
       const label = smellMeta?.name ?? 'Mystery smell';
-      setToastMessage(`Smell found: ${label} +${points}`);
+      setToastMessage(`Gus found ${label}\n+${points} smell points`);
       playSmellFound();
       try {
         ReactNativeHapticFeedback.trigger(HAPTIC_TYPE, HAPTIC_OPTIONS);
@@ -294,24 +294,6 @@ export function MapScreen(): JSX.Element {
       }
     },
   });
-
-  // +1 bump on the smells metric when a new collect lands.
-  const smellCount = activeWalk?.collectedEntityIds.length ?? 0;
-  useEffect(() => {
-    if (smellCount === 0) return;
-    Animated.sequence([
-      Animated.timing(smellPulse, {
-        toValue: 1.3,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.timing(smellPulse, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [smellCount, smellPulse]);
 
   // Live GPS fix fed into distance math below. We intentionally do NOT use
   // `entity.distanceMeters` from the nearby query — that value is cached
@@ -410,8 +392,10 @@ export function MapScreen(): JSX.Element {
     nearbyQuery.data,
   ]);
   const nowIso = useMemo(() => new Date(nowTick).toISOString(), [nowTick]);
-  const movingSeconds = activeWalk ? getMovingDurationSeconds(activeWalk, nowIso) : 0;
   const pausedSeconds = activeWalk ? getPausedDurationSeconds(activeWalk.pauseIntervals, nowIso) : 0;
+  const walkElapsedSeconds = activeWalk
+    ? Math.max(0, Math.round((nowTick - Date.parse(activeWalk.startedAt)) / 1000) - pausedSeconds)
+    : 0;
   const routeCoordinates = useMemo<Position[][]>(() => {
     if (!activeWalk) return [];
     return activeWalk.pathSegments
@@ -444,6 +428,24 @@ export function MapScreen(): JSX.Element {
     if (completed) void schedulePostWalkDebrief();
     openCompletedWalk(completed);
   }, [endWalk, openCompletedWalk]);
+
+  const primaryWalkLabel = !activeWalk
+    ? 'Start Walk'
+    : activeWalk.status === 'paused'
+      ? 'Resume'
+      : 'Pause';
+  const primaryWalkIcon = !activeWalk ? '👣' : activeWalk.status === 'paused' ? '▶' : 'Ⅱ';
+  const handlePrimaryWalkAction = useCallback(() => {
+    if (!activeWalk) {
+      void startWalk(movement.latest?.location ?? null);
+      return;
+    }
+    if (activeWalk.status === 'paused') {
+      void resumeWalk(movement.latest?.location ?? null);
+      return;
+    }
+    void pauseWalk();
+  }, [activeWalk, movement.latest?.location, pauseWalk, resumeWalk, startWalk]);
 
   return (
     <View style={styles.container}>
@@ -508,70 +510,186 @@ export function MapScreen(): JSX.Element {
           );
         })}
       </MapboxGL.MapView>
-      <View style={styles.walkPanel}>
-        <View style={styles.walkMetrics}>
-          <Metric label="moving" value={formatDuration(movingSeconds)} />
-          <Metric label="distance" value={`${Math.round(activeWalk?.distanceMeters ?? 0)}m`} />
-          <Metric label="steps" value={`${activeWalk?.stepCount ?? 0}`} />
-          <Animated.View style={{ transform: [{ scale: smellPulse }] }}>
-            <Metric label="smells" value={`${smellCount}`} />
-          </Animated.View>
-        </View>
-        {activeWalk && pausedSeconds > 0 ? (
-          <Text style={styles.pausedText}>Paused {formatDuration(pausedSeconds)}</Text>
-        ) : null}
-        <View style={styles.walkActions}>
-          {!activeWalk ? (
+      <View
+        style={[
+          styles.topNav,
+          activeWalk && styles.activeTopNav,
+          { paddingTop: insets.top + (activeWalk ? 20 : 38) },
+        ]}
+      >
+        {activeWalk ? (
+          <View style={styles.walkingHeader}>
+            <View style={styles.walkingAvatarRing}>
+              <Image
+                source={require('../assets/onboarding/gus-avatar.png')}
+                style={styles.walkingAvatar}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+            <View>
+              <Text style={styles.walkingTitle}>Walking with Gus</Text>
+              <View style={styles.walkingStatusRow}>
+                <View
+                  style={[
+                    styles.walkingStatusDot,
+                    activeWalk.status === 'paused' && styles.walkingStatusDotPaused,
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.walkingStatusText,
+                    activeWalk.status === 'paused' && styles.walkingStatusTextPaused,
+                  ]}
+                >
+                  {activeWalk.status === 'paused' ? 'Paused' : 'Live'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <>
+            <MapTopNavItem icon="🌤️" label="21°" />
+            <MapTopNavItem icon="📖" label="Stats" onPress={() => navigation.navigate('Stats')} />
+            <MapTopNavItem
+              icon="🗺️"
+              label="Walks"
+              onPress={() => navigation.navigate('WalkHistory')}
+            />
+            <MapTopNavItem
+              icon="⚙️"
+              label="Settings"
+              onPress={() => navigation.navigate('Settings')}
+            />
+          </>
+        )}
+      </View>
+      <View
+        style={[
+          styles.bottomNav,
+          activeWalk && styles.activeBottomNav,
+          { paddingBottom: insets.bottom + (activeWalk ? 10 : 22) },
+        ]}
+      >
+        {activeWalk ? (
+          <>
+            <View style={styles.walkMetrics} accessible accessibilityLabel="Walk stats">
+              <WalkMetric label="Time" value={formatDuration(walkElapsedSeconds)} />
+              <WalkMetric label="Distance" value={formatDistance(activeWalk.distanceMeters)} />
+              <WalkMetric label="Steps" value={activeWalk.stepCount.toLocaleString()} />
+              <WalkMetric label="Smells" value={`${activeWalk.collectedEntityIds.length}`} />
+            </View>
+            <View style={styles.bottomNavItems}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Wall"
+                style={({ pressed }) => [styles.bottomNavItem, pressed && styles.bottomNavItemPressed]}
+                onPress={() => navigation.navigate('Wall')}
+              >
+                <Text style={styles.wallIcon}>🪧</Text>
+                <Text style={styles.bottomNavText}>Wall</Text>
+              </Pressable>
+              <View style={styles.primaryWalkSlot}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={primaryWalkLabel}
+                  style={({ pressed }) => [
+                    styles.primaryWalkCircle,
+                    styles.activePrimaryWalkCircle,
+                    activeWalk.status === 'paused' && styles.resumeWalkCircle,
+                    pressed && styles.primaryWalkCirclePressed,
+                  ]}
+                  onPress={handlePrimaryWalkAction}
+                >
+                  <Text
+                    style={[
+                      styles.primaryWalkIcon,
+                      activeWalk.status === 'paused' && styles.resumeWalkCircleText,
+                    ]}
+                  >
+                    {primaryWalkIcon}
+                  </Text>
+                </Pressable>
+                <Text
+                  style={[
+                    styles.bottomNavText,
+                    styles.primaryWalkLabel,
+                    activeWalk.status === 'paused' && styles.resumeWalkCircleText,
+                  ]}
+                >
+                  {primaryWalkLabel}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Chat with Gus"
+                style={({ pressed }) => [styles.bottomNavItem, pressed && styles.bottomNavItemPressed]}
+                onPress={() => navigation.navigate('Chat')}
+              >
+                <Image
+                  source={require('../assets/onboarding/gus-avatar.png')}
+                  style={styles.chatIcon}
+                  resizeMode="contain"
+                  accessibilityIgnoresInvertColors
+                />
+                <Text style={styles.bottomNavText}>Chat</Text>
+              </Pressable>
+            </View>
             <Pressable
               accessibilityRole="button"
-              style={styles.primaryWalkButton}
-              onPress={() => void startWalk(movement.latest?.location ?? null)}
+              style={({ pressed }) => [styles.endWalkButton, pressed && styles.endWalkButtonPressed]}
+              onPress={() => void endAndOpenWalk()}
             >
-              <Text style={styles.primaryWalkButtonText}>Start Walk</Text>
+              <Text style={styles.endWalkButtonIcon}>■</Text>
+              <Text style={styles.endWalkButtonText}>End Walk</Text>
             </Pressable>
-          ) : activeWalk.status === 'paused' ? (
-            <>
+            {pausedSeconds > 0 ? (
+              <Text style={styles.pausedText}>Paused {formatDuration(pausedSeconds)}</Text>
+            ) : null}
+          </>
+        ) : (
+          <View style={styles.bottomNavItems}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Wall"
+              style={({ pressed }) => [styles.bottomNavItem, pressed && styles.bottomNavItemPressed]}
+              onPress={() => navigation.navigate('Wall')}
+            >
+              <Text style={styles.wallIcon}>🪧</Text>
+              <Text style={styles.bottomNavText}>Wall</Text>
+            </Pressable>
+            <View style={styles.primaryWalkSlot}>
               <Pressable
                 accessibilityRole="button"
-                style={styles.primaryWalkButton}
-                onPress={() => void resumeWalk(movement.latest?.location ?? null)}
+                accessibilityLabel={primaryWalkLabel}
+                style={({ pressed }) => [
+                  styles.primaryWalkCircle,
+                  pressed && styles.primaryWalkCirclePressed,
+                ]}
+                onPress={handlePrimaryWalkAction}
               >
-                <Text style={styles.primaryWalkButtonText}>Resume</Text>
+                <Text style={styles.primaryWalkIcon}>{primaryWalkIcon}</Text>
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                style={styles.secondaryWalkButton}
-                onPress={() => void endAndOpenWalk()}
-              >
-                <Text style={styles.secondaryWalkButtonText}>End</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Pressable
-                accessibilityRole="button"
-                style={styles.secondaryWalkButton}
-                onPress={() => void pauseWalk()}
-              >
-                <Text style={styles.secondaryWalkButtonText}>Pause</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                style={styles.dangerWalkButton}
-                onPress={() => void endAndOpenWalk()}
-              >
-                <Text style={styles.dangerWalkButtonText}>End</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.gusButton}
-          onPress={() => navigation.navigate('Chat')}
-        >
-          <Text style={styles.gusButtonText}>Gus</Text>
-        </Pressable>
+              <Text style={[styles.bottomNavText, styles.primaryWalkLabel]}>
+                {primaryWalkLabel}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Chat with Gus"
+              style={({ pressed }) => [styles.bottomNavItem, pressed && styles.bottomNavItemPressed]}
+              onPress={() => navigation.navigate('Chat')}
+            >
+              <Image
+                source={require('../assets/onboarding/gus-avatar.png')}
+                style={styles.chatIcon}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
+              <Text style={styles.bottomNavText}>Chat</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
       {activeWalk && recoveryPromptPending ? (
         <View style={styles.recoveryPanel}>
@@ -609,7 +727,11 @@ export function MapScreen(): JSX.Element {
           accessibilityLabel="Center map on your location"
           accessibilityRole="button"
           hitSlop={12}
-          style={({ pressed }) => [styles.recenterButton, pressed && styles.recenterButtonPressed]}
+          style={({ pressed }) => [
+            styles.recenterButton,
+            activeWalk && styles.activeRecenterButton,
+            pressed && styles.recenterButtonPressed,
+          ]}
           onPress={recenterOnUser}
         >
           <View style={styles.navigationArrow} />
@@ -671,12 +793,54 @@ export function MapScreen(): JSX.Element {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }): JSX.Element {
+function WalkMetric({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <View style={styles.metric}>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+      <Text style={styles.metricLabel} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
+  );
+}
+
+function MapTopNavItem({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  onPress?: () => void;
+}): JSX.Element {
+  const content = (
+    <>
+      <Text style={styles.topNavIcon}>{icon}</Text>
+      <Text style={styles.topNavLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+        {label}
+      </Text>
+    </>
+  );
+
+  if (!onPress) {
+    return (
+      <View style={styles.topNavItem} accessible accessibilityLabel={label}>
+        {content}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.topNavItem, pressed && styles.topNavItemPressed]}
+      onPress={onPress}
+    >
+      {content}
+    </Pressable>
   );
 }
 
@@ -684,6 +848,11 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatDistance(meters: number): string {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
 }
 
 function roundKey(lat: number, lng: number): string {
@@ -843,63 +1012,277 @@ function categorizeError(err: unknown): {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
-  walkPanel: {
+  topNav: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 16,
-    zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderRadius: 8,
-    padding: 10,
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 12,
+    minHeight: 118,
+    paddingHorizontal: 18,
+    paddingBottom: 21,
+    borderBottomLeftRadius: 21,
+    borderBottomRightRadius: 21,
+    backgroundColor: '#f7efe5',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10.5,
+    elevation: 8,
+  },
+  activeTopNav: {
+    minHeight: 96,
+    paddingBottom: 10,
+  },
+  topNavItem: {
+    flex: 1,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  topNavItemPressed: {
+    opacity: 0.65,
+  },
+  topNavIcon: {
+    fontSize: 19.4,
+    lineHeight: 24,
+    marginBottom: 2,
+  },
+  topNavLabel: {
+    color: '#000',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+    width: '100%',
+  },
+  walkingHeader: {
+    flex: 1,
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 0,
+  },
+  walkingAvatarRing: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 3,
+    borderColor: '#c89f78',
+    backgroundColor: '#fffaf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  walkingAvatar: {
+    width: 42,
+    height: 42,
+  },
+  walkingTitle: {
+    color: '#000',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  walkingStatusRow: {
+    marginTop: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  walkingStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 4,
+    backgroundColor: '#76bc67',
+  },
+  walkingStatusDotPaused: {
+    backgroundColor: '#c69f7a',
+  },
+  walkingStatusText: {
+    color: '#76bc67',
+    fontSize: 12,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  walkingStatusTextPaused: {
+    color: '#9b6e45',
+  },
+  bottomNav: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 12,
+    minHeight: 145,
+    paddingTop: 45,
+    paddingHorizontal: 35,
+    borderTopLeftRadius: 38,
+    borderTopRightRadius: 38,
+    backgroundColor: '#f7efe5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.13,
+    shadowRadius: 10.5,
+    elevation: 8,
+  },
+  activeBottomNav: {
+    minHeight: 286,
+    paddingTop: 18,
+  },
+  bottomNavItems: {
+    minHeight: 82,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  bottomNavItem: {
+    width: 74,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  bottomNavItemPressed: {
+    opacity: 0.65,
+  },
+  bottomNavText: {
+    color: '#000',
+    fontSize: 18,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  primaryWalkLabel: {
+    fontWeight: '700',
+  },
+  wallIcon: {
+    fontSize: 34.2,
+    lineHeight: 47,
+    marginBottom: 1,
+  },
+  chatIcon: {
+    width: 48,
+    height: 36,
+    marginBottom: 10,
+  },
+  primaryWalkSlot: {
+    width: 108,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  primaryWalkCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    marginTop: -80,
+    marginBottom: 16,
+    borderWidth: 7,
+    borderColor: '#ffffff',
+    backgroundColor: '#ead9c5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.13,
+    shadowRadius: 7,
+    elevation: 6,
+  },
+  primaryWalkCirclePressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.97 }],
+  },
+  resumeWalkCircle: {
+    backgroundColor: '#cce8c4',
+  },
+  resumeWalkCircleText: {
+    color: '#1e5b2a',
+  },
+  primaryWalkIcon: {
+    color: '#2c2724',
+    fontSize: 42,
+    lineHeight: 55,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  activePrimaryWalkCircle: {
+    marginTop: 0,
   },
   walkMetrics: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    minHeight: 58,
+    marginBottom: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 19,
+    backgroundColor: '#f0e4d4',
   },
   metric: {
+    flex: 1,
     alignItems: 'center',
-    minWidth: 72,
+    minWidth: 0,
   },
   metricValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
+    color: '#000',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '800',
+    maxWidth: '100%',
   },
   metricLabel: {
     marginTop: 1,
-    fontSize: 11,
-    color: '#6B7280',
+    color: '#7b6a58',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
     textTransform: 'uppercase',
   },
+  liveWalkFooter: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   pausedText: {
-    marginBottom: 8,
-    textAlign: 'center',
-    color: '#6B7280',
+    marginTop: 5,
+    textAlign: 'left',
+    color: '#7b6a58',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   walkActions: {
     flexDirection: 'row',
     gap: 8,
   },
-  gusButton: {
-    marginTop: 8,
-    minHeight: 38,
-    borderRadius: 8,
-    backgroundColor: '#111827',
+  endWalkButton: {
+    minHeight: 54,
+    marginTop: 18,
+    borderRadius: 16,
+    backgroundColor: '#d9412e',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  gusButtonText: {
-    color: 'white',
-    fontSize: 15,
+  endWalkButtonPressed: {
+    opacity: 0.82,
+  },
+  endWalkButtonIcon: {
+    color: '#f0e4d4',
+    fontSize: 18,
+    lineHeight: 22,
+    marginRight: 14,
+  },
+  endWalkButtonText: {
+    color: '#f0e4d4',
+    fontSize: 16,
+    lineHeight: 22,
     fontWeight: '800',
   },
   recoveryPanel: {
@@ -981,8 +1364,8 @@ const styles = StyleSheet.create({
   recenterButton: {
     position: 'absolute',
     right: 18,
-    bottom: 154,
-    zIndex: 12,
+    bottom: 232,
+    zIndex: 40,
     width: 58,
     height: 58,
     borderRadius: 29,
@@ -993,7 +1376,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.22,
     shadowRadius: 6,
-    elevation: 6,
+    elevation: 20,
+  },
+  activeRecenterButton: {
+    bottom: 310,
   },
   recenterButtonPressed: {
     opacity: 0.75,

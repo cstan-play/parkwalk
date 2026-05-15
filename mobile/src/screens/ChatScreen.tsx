@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,13 +13,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FigmaArrow } from '@/components/ui/FigmaArrow';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { useChatStore, type FiringCategory } from '@/stores/chatStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chat'>;
 
-export function ChatScreen(_props: Props): JSX.Element {
+export function ChatScreen({ navigation }: Props): JSX.Element {
+  const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const messages = useChatStore((s) => s.messages);
   const loading = useChatStore((s) => s.loading);
@@ -64,6 +68,7 @@ export function ChatScreen(_props: Props): JSX.Element {
   const canSend = draft.trim().length > 0 && !sending;
 
   const data = useMemo(() => messages, [messages]);
+  const headerHeight = 118 + insets.top;
 
   async function submit(): Promise<void> {
     const content = draft.trim();
@@ -88,8 +93,30 @@ export function ChatScreen(_props: Props): JSX.Element {
     <KeyboardAvoidingView
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={88}
+      keyboardVerticalOffset={0}
     >
+      <View style={[styles.header, { height: headerHeight, paddingTop: insets.top + 36 }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to homescreen"
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.backButton,
+            { top: insets.top + 36 },
+            pressed && styles.circleButtonPressed,
+          ]}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Map');
+            }
+          }}
+        >
+          <FigmaArrow direction="back" size={38} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Back to homescreen</Text>
+      </View>
       {error ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{error}</Text>
@@ -134,12 +161,13 @@ export function ChatScreen(_props: Props): JSX.Element {
         onContentSizeChange={scrollToBottom}
       />
 
-      <View style={styles.composer}>
+      <View style={[styles.composer, { paddingBottom: insets.bottom + 20 }]}>
         <TextInput
           style={styles.input}
           value={draft}
           onChangeText={setDraft}
-          placeholder="Message Gus"
+          placeholder="Type your message to Gus"
+          placeholderTextColor="#97948C"
           multiline
           maxLength={2000}
           editable={!sending}
@@ -154,7 +182,7 @@ export function ChatScreen(_props: Props): JSX.Element {
           disabled={!canSend}
           onPress={() => void submit()}
         >
-          <Text style={styles.sendButtonText}>{sending ? '...' : 'Send'}</Text>
+          {sending ? <Text style={styles.sendButtonText}>...</Text> : <FigmaArrow size={38} />}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -177,6 +205,7 @@ function MessageBubble({
   const repliesDisabled = replying || !!message.selectedReply;
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.gusRow]}>
+      {isUser ? null : <GusAvatar />}
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.gusBubble]}>
         <CategoryChip message={message} />
         <Text style={[styles.messageHeader, isUser ? styles.userHeader : styles.gusHeader]}>
@@ -249,6 +278,7 @@ function ThinkingBubble({ category }: { category: FiringCategory }): JSX.Element
   const borderColor = categoryColor(category);
   return (
     <View style={[styles.messageRow, styles.gusRow]}>
+      <GusAvatar />
       <View
         style={[
           styles.bubble,
@@ -260,6 +290,19 @@ function ThinkingBubble({ category }: { category: FiringCategory }): JSX.Element
         <ActivityIndicator size="small" />
         <Text style={styles.thinkingText}>Gus is thinking...</Text>
       </View>
+    </View>
+  );
+}
+
+function GusAvatar(): JSX.Element {
+  return (
+    <View style={styles.avatarRing}>
+      <Image
+        source={require('../assets/onboarding/gus-avatar.png')}
+        style={styles.avatarImage}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+      />
     </View>
   );
 }
@@ -280,13 +323,13 @@ function CategoryChip({ message }: { message: ChatMessage }): JSX.Element | null
 function categoryColor(category: FiringCategory): string | null {
   switch (category) {
     case 'morning_check_in':
-      return '#F59E0B';
+      return '#B98551';
     case 'walk_reminder':
-      return '#059669';
+      return '#7A9B70';
     case 'post_walk_debrief':
-      return '#0EA5E9';
+      return '#8AA1A9';
     case 'gus_intro':
-      return '#7C3AED';
+      return '#BC8F65';
     default:
       return null;
   }
@@ -312,79 +355,155 @@ function formatTime(iso: string): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F9FAFB' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorBanner: {
-    margin: 12,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
+  screen: { flex: 1, backgroundColor: '#F4ECE1' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4ECE1' },
+  header: {
+    backgroundColor: '#F7EFE5',
+    borderBottomLeftRadius: 21,
+    borderBottomRightRadius: 21,
+    shadowColor: '#D1C0AC',
+    shadowOpacity: 0.85,
+    shadowRadius: 10.5,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    zIndex: 2,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 22,
+    top: 36,
+    width: 65,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#C89566',
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: '#F7EFE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleButtonPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.98 }],
+  },
+  backArrow: {
+    color: '#FFFFFF',
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: '800',
+    marginTop: -2,
+  },
+  headerTitle: {
+    alignSelf: 'center',
+    marginTop: 24,
+    marginLeft: 54,
+    color: '#000000',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  errorBanner: {
+    marginHorizontal: 14,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 19,
+    backgroundColor: '#F0E4D4',
+    borderWidth: 1,
+    borderColor: '#BC8F65',
     flexDirection: 'row',
     gap: 10,
     alignItems: 'center',
   },
-  errorText: { flex: 1, color: '#991B1B', fontSize: 13 },
+  errorText: { flex: 1, color: '#6B3F24', fontSize: 13, lineHeight: 18 },
   retryButton: { paddingHorizontal: 8, paddingVertical: 6 },
-  retryText: { color: '#991B1B', fontWeight: '700' },
-  messageList: { padding: 14, gap: 10 },
+  retryText: { color: '#6B3F24', fontWeight: '800' },
+  messageList: {
+    paddingTop: 42,
+    paddingBottom: 28,
+    paddingHorizontal: 13,
+    gap: 16,
+  },
   emptyMessageList: { flexGrow: 1, justifyContent: 'center' },
   emptyState: { alignItems: 'center', paddingHorizontal: 24 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  emptyText: { color: '#6B7280', fontSize: 14 },
-  messageRow: { flexDirection: 'row' },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#000000', marginBottom: 4 },
+  emptyText: { color: '#5A5148', fontSize: 14 },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-start' },
   userRow: { justifyContent: 'flex-end' },
   gusRow: { justifyContent: 'flex-start' },
+  avatarRing: {
+    width: 67,
+    height: 67,
+    borderRadius: 34,
+    borderWidth: 3,
+    borderColor: '#C89566',
+    backgroundColor: '#F7EFE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  avatarImage: {
+    width: 51,
+    height: 51,
+  },
   bubble: {
-    maxWidth: '82%',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    maxWidth: '74%',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
-  userBubble: { backgroundColor: '#111827' },
+  userBubble: {
+    backgroundColor: '#BC8F65',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 0,
+    marginRight: 10,
+  },
   gusBubble: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#F0E4D4',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 32,
   },
-  messageText: { fontSize: 16, lineHeight: 21 },
-  userText: { color: 'white' },
-  gusText: { color: '#111827' },
+  messageText: { fontSize: 16, lineHeight: 22, fontWeight: '500' },
+  userText: { color: '#F7EFE5' },
+  gusText: { color: '#000000' },
   quickReplies: {
-    marginTop: 10,
+    marginTop: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
   quickReplyButton: {
     borderWidth: 1,
-    borderColor: '#059669',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: '#ECFDF5',
+    borderColor: '#BC8F65',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F7EFE5',
   },
   quickReplyButtonDisabled: {
     opacity: 0.45,
   },
   quickReplyText: {
-    color: '#047857',
+    color: '#6B3F24',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   selectedReplyRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  selectedReplyLabel: { color: '#6B7280', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  selectedReplyLabel: {
+    color: '#6B3F24',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   selectedReplyPill: {
-    borderRadius: 8,
+    borderRadius: 18,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: '#111827',
+    backgroundColor: '#BC8F65',
   },
-  selectedReplyText: { color: 'white', fontSize: 13, fontWeight: '700' },
+  selectedReplyText: { color: '#F7EFE5', fontSize: 13, fontWeight: '800' },
   messageHeader: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     marginBottom: 4,
   },
   categoryChip: {
@@ -395,50 +514,64 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   categoryChipText: {
-    color: 'white',
+    color: '#F7EFE5',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0,
   },
-  gusHeader: { color: '#6B7280' },
-  userHeader: { color: '#9CA3AF' },
+  gusHeader: { color: '#7B6A58' },
+  userHeader: { color: '#F7EFE5', opacity: 0.85 },
   timestamp: { marginTop: 5, fontSize: 11, alignSelf: 'flex-end' },
-  userTimestamp: { color: '#D1D5DB' },
-  gusTimestamp: { color: '#9CA3AF' },
+  userTimestamp: { color: '#F7EFE5', opacity: 0.7 },
+  gusTimestamp: { color: '#7B6A58' },
   thinkingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  thinkingText: { color: '#4B5563', fontSize: 14 },
+  thinkingText: { color: '#5A5148', fontSize: 14 },
   composer: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-end',
-    padding: 12,
-    borderTopWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: 'white',
+    gap: 16,
+    alignItems: 'center',
+    minHeight: 114,
+    paddingTop: 24,
+    paddingHorizontal: 13,
+    backgroundColor: '#F7EFE5',
+    borderTopLeftRadius: 21,
+    borderTopRightRadius: 21,
+    shadowColor: '#D2C1B1',
+    shadowOpacity: 0.9,
+    shadowRadius: 10.5,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 14,
   },
   input: {
     flex: 1,
-    minHeight: 42,
-    maxHeight: 110,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    minHeight: 70,
+    maxHeight: 118,
+    borderRadius: 19,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    fontSize: 18,
+    lineHeight: 22,
+    color: '#000000',
+    backgroundColor: '#F0E4D4',
+    textAlignVertical: 'center',
   },
   sendButton: {
-    minHeight: 42,
-    minWidth: 68,
-    borderRadius: 8,
-    backgroundColor: '#059669',
+    width: 65,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#C89566',
+    borderWidth: 1,
+    borderColor: '#F7EFE5',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
   },
   sendButtonDisabled: { opacity: 0.45 },
-  sendButtonText: { color: 'white', fontWeight: '700', fontSize: 15 },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 38,
+    lineHeight: 42,
+    marginTop: -4,
+  },
 });

@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 
-const DISMISS_AFTER_MS = 1600;
+const DISMISS_AFTER_MS = 2800;
 const ANIMATION_MS = 200;
 
 /**
  * Non-blocking transient toast for auto-collect feedback. Renders at the
- * bottom of the screen, fades in, sits for ~1.6s, fades out. Multiple
+ * bottom of the screen, fades in, sits briefly, fades out. Multiple
  * collects within the dismiss window coalesce — latest wins — because
  * `message` is a single string prop and changes simply restart the timer.
  *
@@ -54,7 +54,7 @@ export function SmellToast({ message, onHidden }: SmellToastProps): JSX.Element 
   if (!message) return null;
   return (
     <Animated.View pointerEvents="none" style={[styles.toast, { opacity }]}>
-      <Text style={styles.text} numberOfLines={2}>
+      <Text style={styles.text} numberOfLines={3}>
         {message}
       </Text>
     </Animated.View>
@@ -66,22 +66,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 180,
-    backgroundColor: 'rgba(17, 24, 39, 0.94)',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    bottom: 326,
+    backgroundColor: '#F7EFE5',
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    paddingVertical: 13,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowColor: '#6A3E1B',
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 8,
   },
   text: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#5A1C01',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '900',
     textAlign: 'center',
   },
 });

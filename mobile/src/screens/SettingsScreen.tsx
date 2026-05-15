@@ -1,9 +1,10 @@
 import type { GusModelOption, GusNotificationCategory, UpsertGusPrefsRequest } from '@parkwalk/shared';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Button,
   Modal,
   Pressable,
   ScrollView,
@@ -13,15 +14,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { logout as revokeSession } from '@/services/authApi';
 import {
   rescheduleAllGusNotifications,
   scheduleTestGusNotification,
 } from '@/notifications/scheduler';
+import { logout as revokeSession } from '@/services/authApi';
 import { useAuthStore } from '@/stores/authStore';
 import { useGusStore } from '@/stores/gusStore';
 import { normalizeApiBaseUrl, useSettingsStore } from '@/stores/settingsStore';
@@ -182,11 +181,11 @@ export function SettingsScreen(): JSX.Element {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
       {isAuthenticated ? (
         <>
           <Text style={styles.header}>Gus</Text>
-          <Button
+          <AppButton
             title="Set up your dog"
             onPress={() => navigation.navigate('DogProfileSetup')}
           />
@@ -265,26 +264,29 @@ export function SettingsScreen(): JSX.Element {
               }
             />
           </View>
-          <Button
+          <AppButton
             title={savingReminders ? 'Saving reminders...' : 'Save Gus reminders'}
             onPress={() => void saveReminders()}
             disabled={savingReminders}
           />
           <View style={styles.testButtons}>
-            <Button
+            <AppButton
               title={testCategory === 'morning_check_in' ? 'Scheduling...' : 'Test morning'}
               onPress={() => void testNotification('morning_check_in')}
               disabled={testCategory !== null}
+              variant="soft"
             />
-            <Button
+            <AppButton
               title={testCategory === 'walk_reminder' ? 'Scheduling...' : 'Test walk'}
               onPress={() => void testNotification('walk_reminder')}
               disabled={testCategory !== null}
+              variant="soft"
             />
-            <Button
+            <AppButton
               title={testCategory === 'post_walk_debrief' ? 'Scheduling...' : 'Test debrief'}
               onPress={() => void testNotification('post_walk_debrief')}
               disabled={testCategory !== null}
+              variant="soft"
             />
           </View>
           <View style={{ height: 24 }} />
@@ -302,18 +304,18 @@ export function SettingsScreen(): JSX.Element {
         autoCapitalize="none"
         keyboardType="url"
       />
-      <Button title="Use hosted API" onPress={() => useUrl(apiUrl)} />
+      <AppButton title="Use hosted API" onPress={() => void useUrl(apiUrl)} />
 
       <View style={{ height: 24 }} />
-      <Button title="Save URL" onPress={save} />
+      <AppButton title="Save URL" onPress={() => void save()} variant="soft" />
 
       <View style={{ height: 32 }} />
       {isAuthenticated ? (
-        <Button
+        <AppButton
           title={signingOut ? 'Signing out...' : 'Sign out'}
-          color="#c00"
-          onPress={signOut}
+          onPress={() => void signOut()}
           disabled={signingOut}
+          variant="danger"
         />
       ) : null}
     </ScrollView>
@@ -332,8 +334,48 @@ function ReminderToggle({
   return (
     <View style={styles.toggleRow}>
       <Text style={styles.toggleLabel}>{label}</Text>
-      <Switch value={value} onValueChange={onValueChange} />
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{ false: '#E4D7C8', true: '#D9B48E' }}
+        thumbColor={value ? '#BC8F65' : '#F7EFE5'}
+      />
     </View>
+  );
+}
+
+function AppButton({
+  title,
+  onPress,
+  disabled,
+  variant = 'primary',
+}: {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: 'primary' | 'soft' | 'danger';
+}): JSX.Element {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.appButton,
+        variant === 'soft' && styles.appButtonSoft,
+        variant === 'danger' && styles.appButtonDanger,
+        (pressed || disabled) && styles.appButtonPressed,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.appButtonText,
+          variant === 'soft' && styles.appButtonSoftText,
+        ]}
+      >
+        {title}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -357,6 +399,7 @@ function TimeField({
         keyboardType="numbers-and-punctuation"
         maxLength={5}
         placeholder="HH:MM"
+        placeholderTextColor="#9C9185"
       />
     </View>
   );
@@ -446,37 +489,75 @@ function ModelDropdown({
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, gap: 6 },
-  header: { fontSize: 18, fontWeight: '600' },
-  current: { color: '#666', marginBottom: 12 },
-  sectionHeader: { marginTop: 18 },
-  label: { fontSize: 13, color: '#666' },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  screen: { flex: 1, backgroundColor: '#F4ECE1' },
+  container: { padding: 18, paddingBottom: 36, gap: 8 },
+  header: {
+    color: '#000',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+    marginBottom: 4,
   },
-  modelMeta: { marginTop: 12, color: '#666', fontSize: 13 },
+  current: {
+    color: '#5A5148',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  sectionHeader: { marginTop: 22 },
+  label: { fontSize: 12, lineHeight: 16, color: '#7B6A58', fontWeight: '800', textTransform: 'uppercase' },
+  input: {
+    minHeight: 48,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#F7EFE5',
+    color: '#000',
+    fontSize: 15,
+  },
+  appButton: {
+    minHeight: 50,
+    borderRadius: 999,
+    backgroundColor: '#BC8F65',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    marginTop: 6,
+  },
+  appButtonSoft: {
+    backgroundColor: '#F0E4D4',
+  },
+  appButtonDanger: {
+    backgroundColor: '#D9412E',
+  },
+  appButtonPressed: {
+    opacity: 0.68,
+  },
+  appButtonText: {
+    color: '#F7EFE5',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  appButtonSoftText: {
+    color: '#6B3F24',
+  },
+  modelMeta: { marginTop: 8, color: '#5A5148', fontSize: 13, lineHeight: 18 },
   loadingRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 6 },
-  loadingText: { color: '#666', fontSize: 13 },
-  modelField: { gap: 4, marginTop: 10 },
+  loadingText: { color: '#5A5148', fontSize: 13 },
+  modelField: { gap: 5, marginTop: 10 },
   dropdown: {
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 12,
+    minHeight: 50,
+    borderRadius: 16,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'white',
+    backgroundColor: '#F7EFE5',
   },
   dropdownDisabled: { opacity: 0.55 },
-  dropdownValue: { flex: 1, color: '#111', fontSize: 14 },
-  dropdownChevron: { color: '#666', fontSize: 14, marginLeft: 8 },
-  modelHint: { color: '#999', fontSize: 12 },
+  dropdownValue: { flex: 1, color: '#000', fontSize: 14, fontWeight: '700' },
+  dropdownChevron: { color: '#6B3F24', fontSize: 14, marginLeft: 8, fontWeight: '800' },
+  modelHint: { color: '#7B6A58', fontSize: 12 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -485,28 +566,31 @@ const styles = StyleSheet.create({
   },
   modalPanel: {
     maxHeight: '70%',
-    borderRadius: 8,
-    backgroundColor: 'white',
-    padding: 14,
+    borderRadius: 21,
+    backgroundColor: '#F7EFE5',
+    padding: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 10 },
+  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 10, color: '#000' },
   modalList: { maxHeight: 420 },
   modelOption: {
     paddingVertical: 12,
     paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E4D7C8',
   },
-  modelOptionSelected: { backgroundColor: '#ECFDF5' },
-  modelOptionText: { color: '#111', fontSize: 14 },
-  modelOptionTextSelected: { color: '#047857', fontWeight: '700' },
+  modelOptionSelected: { backgroundColor: '#F0E4D4', borderRadius: 12 },
+  modelOptionText: { color: '#000', fontSize: 14 },
+  modelOptionTextSelected: { color: '#6B3F24', fontWeight: '800' },
   toggleRow: {
-    minHeight: 44,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: '#F7EFE5',
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  toggleLabel: { color: '#111', fontSize: 15, fontWeight: '600' },
+  toggleLabel: { color: '#000', fontSize: 15, fontWeight: '800' },
   timeField: { flex: 1, gap: 4 },
   timeRow: { flexDirection: 'row', gap: 10 },
   testButtons: { gap: 8, marginTop: 8 },

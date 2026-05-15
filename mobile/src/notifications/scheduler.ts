@@ -1,10 +1,10 @@
 import type { GusNotificationCategory, GusPrefs } from '@parkwalk/shared';
 import { pickStockLine } from '@parkwalk/shared';
 
+import { readNotificationStatus } from './permissions';
+
 import { fetchGusPrefs } from '@/services/gusApi';
 import { useGusStore } from '@/stores/gusStore';
-
-import { readNotificationStatus } from './permissions';
 
 const GUS_NOTIFICATION_PREFIX = 'gus.';
 const CHANNEL_ID = 'gus-reminders';
@@ -19,10 +19,11 @@ export type NotificationScheduleResult =
     };
 
 type NotifeeApi = {
-  createChannel?: (channel: { id: string; name: string }) => Promise<string>;
+  createChannel?: (channel: { id: string; name: string; importance?: number }) => Promise<string>;
   createTriggerNotification: (notification: unknown, trigger: unknown) => Promise<string>;
   cancelNotification: (id: string) => Promise<void>;
   getTriggerNotificationIds: () => Promise<string[]>;
+  AndroidImportance?: { HIGH?: number };
   RepeatFrequency: { DAILY: number };
   TriggerType: { TIMESTAMP: number };
 };
@@ -34,6 +35,7 @@ type NotifeeNativeApi = Pick<
 
 type NotifeeModule = {
   default?: NotifeeNativeApi;
+  AndroidImportance?: NotifeeApi['AndroidImportance'];
   RepeatFrequency?: NotifeeApi['RepeatFrequency'];
   TriggerType?: NotifeeApi['TriggerType'];
 } & Partial<NotifeeNativeApi>;
@@ -60,6 +62,7 @@ function tryLoadNotifee(): NotifeeApi | null {
       createTriggerNotification: nativeApi.createTriggerNotification.bind(nativeApi),
       cancelNotification: nativeApi.cancelNotification.bind(nativeApi),
       getTriggerNotificationIds: nativeApi.getTriggerNotificationIds.bind(nativeApi),
+      AndroidImportance: mod.AndroidImportance,
       RepeatFrequency: mod.RepeatFrequency,
       TriggerType: mod.TriggerType,
     };
@@ -150,7 +153,11 @@ async function loadPrefs(): Promise<GusPrefs | null> {
 
 async function ensureChannel(api: NotifeeApi): Promise<void> {
   if (!api.createChannel) return;
-  await api.createChannel({ id: CHANNEL_ID, name: 'Gus reminders' });
+  await api.createChannel({
+    id: CHANNEL_ID,
+    name: 'Gus reminders',
+    importance: api.AndroidImportance?.HIGH,
+  });
 }
 
 async function cancelGusNotifications(

@@ -486,10 +486,10 @@ function quickReplyFallback(reply: GusQuickReply): string {
   switch (reply.dataField) {
     case 'mood':
       if (reply.value === 'no') return "Okay. I'm here. No speech.";
-      if (reply.value === 'barely') return "Noted. We're keeping the bar on the floor today.";
+      if (reply.value === 'barely') return "Logged. Low bar day. I can work with low bars.";
       return 'Noted. I will be normal about this for almost ten seconds.';
     case 'motor_state':
-      if (reply.value === 'off') return "Got it. Short leash today, metaphorically. I hate metaphors.";
+      if (reply.value === 'off') return "Got it. Gentle settings today.";
       if (reply.value === 'bit_off') return 'Logged. I will pretend not to hover.';
       return 'Good. I noticed. Briefly mature of me.';
     default:
@@ -502,6 +502,7 @@ function notificationPrompt(category: GusNotificationCategory): string {
     case 'morning_check_in':
       return [
         'Write the morning check-in message now.',
+        'End by asking one plain question about how today feels; the attached buttons answer it.',
         'Do not continue or quote prior chat messages.',
         'Do not print quick-reply labels, button values, markdown, or code fences.',
         'One short Gus message only.',
@@ -517,6 +518,7 @@ function notificationPrompt(category: GusNotificationCategory): string {
       return [
         'Write the post-walk debrief message now.',
         'A walk just ended recently; this is not a morning check-in.',
+        'End by asking one plain question about how their body or motor state feels after the walk; the attached buttons answer it.',
         'Do not call it an evening check-in, morning check-in, status check, or check-in.',
         'Do not continue or quote prior chat messages.',
         'Do not print quick-reply labels, button values, markdown, or code fences.',
