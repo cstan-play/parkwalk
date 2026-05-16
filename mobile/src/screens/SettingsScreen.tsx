@@ -24,7 +24,13 @@ import { logout as revokeSession } from '@/services/authApi';
 import { useAuthStore } from '@/stores/authStore';
 import { useGusStore } from '@/stores/gusStore';
 import { normalizeApiBaseUrl, useSettingsStore } from '@/stores/settingsStore';
+import { useWeatherStore } from '@/stores/weatherStore';
 import { describeApiError } from '@/util/describeApiError';
+import {
+  formatLocationLabel,
+  formatTemperatureLabel,
+  weatherCodeToEmoji,
+} from '@/util/weatherIcon';
 
 export function SettingsScreen(): JSX.Element {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -63,6 +69,12 @@ export function SettingsScreen(): JSX.Element {
       void loadGusModels();
     }
   }, [hydrateGus, isAuthenticated, loadGusModels]);
+
+  const weather = useWeatherStore();
+  const refreshWeather = useWeatherStore((s) => s.refresh);
+  useEffect(() => {
+    void refreshWeather();
+  }, [refreshWeather]);
 
   useEffect(() => {
     if (!gusPrefs) return;
@@ -182,6 +194,17 @@ export function SettingsScreen(): JSX.Element {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
+      <Text style={styles.header}>Weather conditions</Text>
+      <WeatherCard
+        status={weather.status}
+        description={weather.description}
+        location={formatLocationLabel(weather.location)}
+        emoji={weatherCodeToEmoji(weather.raw?.weather_code)}
+        temperature={formatTemperatureLabel(weather.raw?.temperature_2m)}
+        errorMessage={weather.errorMessage}
+      />
+      <View style={{ height: 20 }} />
+
       {isAuthenticated ? (
         <>
           <Text style={styles.header}>Gus</Text>
@@ -319,6 +342,56 @@ export function SettingsScreen(): JSX.Element {
         />
       ) : null}
     </ScrollView>
+  );
+}
+
+function WeatherCard({
+  status,
+  description,
+  location,
+  emoji,
+  temperature,
+  errorMessage,
+}: {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  description: string | null;
+  location: string | null;
+  emoji: string;
+  temperature: string | null;
+  errorMessage: string | null;
+}): JSX.Element {
+  let primary: string;
+  if (status === 'loading' || status === 'idle') {
+    primary = 'Reading the sky...';
+  } else if (status === 'error') {
+    primary = errorMessage ?? 'Weather unavailable';
+  } else {
+    primary = description ?? 'No data';
+    if (temperature && description && !description.includes('°')) {
+      primary = `${description}, ${temperature}`;
+    }
+  }
+  const secondary =
+    status === 'ready'
+      ? location ?? 'Location unknown'
+      : status === 'loading'
+        ? 'Locating...'
+        : status === 'error'
+          ? 'Tap Gus reminders below to retry by reopening this screen.'
+          : ' ';
+
+  return (
+    <View style={styles.weatherCard}>
+      <Text style={styles.weatherEmoji}>{emoji}</Text>
+      <View style={styles.weatherTextBlock}>
+        <Text style={styles.weatherPrimary} numberOfLines={2}>
+          {primary}
+        </Text>
+        <Text style={styles.weatherSecondary} numberOfLines={2}>
+          {secondary}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -589,6 +662,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  weatherCard: {
+    minHeight: 76,
+    borderRadius: 16,
+    backgroundColor: '#F7EFE5',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  weatherEmoji: {
+    fontSize: 36,
+    lineHeight: 40,
+  },
+  weatherTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  weatherPrimary: {
+    color: '#000',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+    textTransform: 'capitalize',
+  },
+  weatherSecondary: {
+    color: '#5A5148',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   toggleLabel: { color: '#000', fontSize: 15, fontWeight: '800' },
   timeField: { flex: 1, gap: 4 },

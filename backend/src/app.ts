@@ -13,6 +13,7 @@ import { buildEntitiesRouter } from './modules/entities/entities.router.js';
 import { buildGusRouter } from './modules/gus/gus.router.js';
 import { buildUsersRouter } from './modules/users/users.router.js';
 import { buildWalksRouter } from './modules/walks/walks.router.js';
+import { buildWeatherRouter } from './modules/weather/weather.router.js';
 import { buildHealthRouter } from './health.js';
 
 import './types.js';
@@ -63,6 +64,7 @@ export function buildApp(): Express {
   app.use(`${base}/users`, buildUsersRouter());
   app.use(`${base}/walks`, buildWalksRouter());
   app.use(`${base}/gus`, buildGusRouter());
+  app.use(`${base}/weather`, buildWeatherRouter());
 
   app.use((req, res) => {
     res.status(404).json({

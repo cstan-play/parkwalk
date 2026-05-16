@@ -36,7 +36,9 @@ import {
   type LocalWalkSession,
   type SmellCollection,
 } from '@/stores/walkSessionStore';
+import { useWeatherStore } from '@/stores/weatherStore';
 import { haversineMeters } from '@/util/geo';
+import { formatTemperatureLabel, weatherCodeToEmoji } from '@/util/weatherIcon';
 
 const COLLECT_COOLDOWN_MS = 4_000;
 // `impactLight` on Android is a sub-perceptible ~10 ms tick on most hardware;
@@ -435,6 +437,17 @@ export function MapScreen(): JSX.Element {
       ? 'Resume'
       : 'Pause';
   const primaryWalkIcon = !activeWalk ? '👣' : activeWalk.status === 'paused' ? '▶' : 'Ⅱ';
+
+  const weatherStatus = useWeatherStore((s) => s.status);
+  const weatherCode = useWeatherStore((s) => s.raw?.weather_code ?? null);
+  const weatherTemp = useWeatherStore((s) => s.raw?.temperature_2m ?? null);
+  const refreshWeather = useWeatherStore((s) => s.refresh);
+  useEffect(() => {
+    void refreshWeather();
+  }, [refreshWeather]);
+  const weatherIcon = weatherCodeToEmoji(weatherCode);
+  const weatherTempLabel =
+    weatherStatus === 'ready' ? formatTemperatureLabel(weatherTemp) ?? '—°' : '—°';
   const handlePrimaryWalkAction = useCallback(() => {
     if (!activeWalk) {
       void startWalk(movement.latest?.location ?? null);
@@ -549,7 +562,7 @@ export function MapScreen(): JSX.Element {
           </View>
         ) : (
           <>
-            <MapTopNavItem icon="🌤️" label="21°" />
+            <MapTopNavItem icon={weatherIcon} label={weatherTempLabel} />
             <MapTopNavItem icon="📖" label="Stats" onPress={() => navigation.navigate('Stats')} />
             <MapTopNavItem
               icon="🗺️"

@@ -3,8 +3,10 @@ import { logger } from '../logger.js';
 import { redis } from '../redis.js';
 
 const CACHE_TTL_SECONDS = 60 * 60;
+const GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24;
 const REQUEST_TIMEOUT_MS = 4_000;
 const CACHE_KEY_PREFIX = 'gus:weather';
+const GEOCODE_CACHE_KEY_PREFIX = 'gus:geocode';
 const NULL_SENTINEL = '__null__';
 
 export interface OpenMeteoCurrent {
@@ -17,6 +19,12 @@ export interface OpenMeteoCurrent {
 export interface WeatherSnapshot {
   raw: OpenMeteoCurrent | null;
   description: string | null;
+}
+
+export interface ReverseGeocode {
+  city: string | null;
+  region: string | null;
+  country: string | null;
 }
 
 /**
@@ -156,4 +164,79 @@ function describeWeatherCode(code: number | undefined): string | null {
   if (code === 95) return 'thunderstorm';
   if (code === 96 || code === 99) return 'thunderstorm with hail';
   return null;
+}
+
+/**
+ * Resolve a lat/lng to a human-readable city / region / country via
+ * BigDataCloud's keyless reverse-geocoding endpoint. Cached in Redis for 24h
+ * keyed by rounded coords — a given grid cell does not change cities on the
+ * scale of a day. Never throws.
+ */
+export async function getReverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<ReverseGeocode | null> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const cacheKey = `${GEOCODE_CACHE_KEY_PREFIX}:${lat.toFixed(2)}:${lng.toFixed(2)}`;
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached !== null) {
+      if (cached === NULL_SENTINEL) return null;
+      try {
+        return JSON.parse(cached) as ReverseGeocode;
+      } catch {
+        // Fall through and refetch on parse failure.
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'geocode cache read failed');
+  }
+
+  let result: ReverseGeocode | null = null;
+  try {
+    result = await fetchReverseGeocode(lat, lng);
+  } catch (err) {
+    logger.warn({ err: (err as Error).message, lat, lng }, 'geocode fetch failed');
+  }
+
+  try {
+    await redis.set(
+      cacheKey,
+      result ? JSON.stringify(result) : NULL_SENTINEL,
+      'EX',
+      GEOCODE_CACHE_TTL_SECONDS,
+    );
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'geocode cache write failed');
+  }
+
+  return result;
+}
+
+async function fetchReverseGeocode(lat: number, lng: number): Promise<ReverseGeocode | null> {
+  const url =
+    `https://api.bigdatacloud.net/data/reverse-geocode-client` +
+    `?latitude=${encodeURIComponent(lat.toString())}` +
+    `&longitude=${encodeURIComponent(lng.toString())}` +
+    `&localityLanguage=en`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const data = (await response.json()) as {
+      city?: string;
+      locality?: string;
+      principalSubdivision?: string;
+      countryName?: string;
+    };
+    const city = (data.city || data.locality || '').trim() || null;
+    const region = (data.principalSubdivision || '').trim() || null;
+    const country = (data.countryName || '').trim() || null;
+    if (!city && !region && !country) return null;
+    return { city, region, country };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
