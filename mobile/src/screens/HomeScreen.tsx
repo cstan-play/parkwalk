@@ -31,6 +31,7 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { useNotificationPermission } from '@/notifications/permissions';
 import { rescheduleAllGusNotifications } from '@/notifications/scheduler';
 import { pickHomeGreeting } from '@/screens/home/messages';
+import { useWeatherStore } from '@/stores/weatherStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -50,9 +51,17 @@ const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'seri
 
 export function HomeScreen({ navigation }: Props): JSX.Element {
   const insets = useSafeAreaInsets();
-  // Re-pick on mount so each cold launch gets a fresh quip but the screen
-  // is stable during a single render lifetime.
-  const greeting = useMemo(() => pickHomeGreeting(), []);
+
+  const weatherCode = useWeatherStore((s) => s.raw?.weather_code ?? null);
+  const refreshWeather = useWeatherStore((s) => s.refresh);
+  useEffect(() => {
+    void refreshWeather();
+  }, [refreshWeather]);
+
+  // Re-pick when weather lands so the screen swaps from the time-of-day
+  // emoji/quip to a weather-flavored one. Stable for a given (cold launch
+  // + weatherCode) pair so the quip doesn't churn while the user reads.
+  const greeting = useMemo(() => pickHomeGreeting(new Date(), Math.random, weatherCode), [weatherCode]);
 
   // Restore the permission prompts that previously lived in OnboardingScreen.
   // The new onboarding flow (HiImGus → ... → Setup → Register → Home) skips

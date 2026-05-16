@@ -1,7 +1,23 @@
-export function weatherCodeToEmoji(code: number | undefined | null): string {
+/**
+ * `now` defaults to the real current time so callers don't have to know
+ * the time of day; callers that already track a bucket can override. The
+ * substitution swaps sun-bearing daytime emojis (codes 0–2) for night
+ * equivalents between 22:00 and 05:00 so a clear sky at midnight does not
+ * render as ☀️.
+ */
+function isNightAt(now: Date): boolean {
+  const h = now.getHours();
+  return h < 5 || h >= 22;
+}
+
+export function weatherCodeToEmoji(
+  code: number | undefined | null,
+  opts?: { now?: Date },
+): string {
   if (code === undefined || code === null || !Number.isFinite(code)) return '🌤️';
-  if (code === 0) return '☀️';
-  if (code <= 2) return '🌤️';
+  const night = isNightAt(opts?.now ?? new Date());
+  if (code === 0) return night ? '🌙' : '☀️';
+  if (code <= 2) return night ? '☁️' : '🌤️';
   if (code === 3) return '☁️';
   if (code === 45 || code === 48) return '🌫️';
   if (code >= 51 && code <= 57) return '🌦️';
